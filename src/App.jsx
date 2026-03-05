@@ -1,5 +1,7 @@
 import { Routes, Route, Link, useNavigate, useParams } from 'react-router-dom'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, createContext, useContext } from 'react'
+
+const AuftraegeContext = createContext(null)
 
 const STORAGE_AUFTRAEGE = 'haus-auftraege'
 const MAX_IMAGE_WIDTH = 800
@@ -135,7 +137,7 @@ const defaultAuftrag = {
   aufmassBemerkung: '',
 }
 
-function useAuftraege() {
+function useAuftraegeState() {
   const [auftraege, setAuftraege] = useState([])
   const [loaded, setLoaded] = useState(false)
 
@@ -183,6 +185,17 @@ function useAuftraege() {
     }
   }, [auftraege, loaded])
   return [auftraege, setAuftraege, loaded]
+}
+
+function AuftraegeProvider({ children }) {
+  const value = useAuftraegeState()
+  return <AuftraegeContext.Provider value={value}>{children}</AuftraegeContext.Provider>
+}
+
+function useAuftraege() {
+  const ctx = useContext(AuftraegeContext)
+  if (!ctx) throw new Error('useAuftraege muss innerhalb von AuftraegeProvider verwendet werden')
+  return ctx
 }
 
 function AuftragListe() {
@@ -842,7 +855,7 @@ function AuftragDetail() {
   }, [loaded, isNeu, id, auftraege, navigate])
 
   if (!loaded) return <div className="page"><p className="muted" style={{ padding: '2rem' }}>Laden…</p></div>
-  if (!auftrag) return null
+  if (!auftrag) return <div className="page"><p className="muted" style={{ padding: '2rem' }}>Auftrag wird geladen…</p></div>
 
   const speichern = () => {
     const adr = (auftrag.adresse || '').trim() || (auftrag.strasse && auftrag.hausnummer ? `${auftrag.strasse} ${auftrag.hausnummer}`.trim() : '')
@@ -1202,10 +1215,12 @@ function AuftragDetail() {
 
 export default function App() {
   return (
-    <Routes>
-      <Route path="/" element={<AuftragListe />} />
-      <Route path="/auftrag/:id" element={<AuftragDetail />} />
-    </Routes>
+    <AuftraegeProvider>
+      <Routes>
+        <Route path="/" element={<AuftragListe />} />
+        <Route path="/auftrag/:id" element={<AuftragDetail />} />
+      </Routes>
+    </AuftraegeProvider>
   )
 }
 
