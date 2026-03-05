@@ -5,6 +5,21 @@ const STORAGE_AUFTRAEGE = 'haus-auftraege'
 const MAX_IMAGE_WIDTH = 800
 const JPEG_QUALITY = 0.75
 
+const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
+
+function getAttachmentSrc(item) {
+  return item?.url || item?.dataUrl || ''
+}
+
+async function uploadOneToServer(file) {
+  const formData = new FormData()
+  formData.append('file', file)
+  const res = await fetch(`${API_BASE}/api/upload`, { method: 'POST', body: formData })
+  if (!res.ok) throw new Error(await res.text().catch(() => 'Upload fehlgeschlagen'))
+  const data = await res.json()
+  return { name: data.name || file.name, url: data.url, size: data.size ?? file.size, type: file.type }
+}
+
 function compressDataUrl(dataUrl) {
   return new Promise((resolve) => {
     if (!dataUrl || !dataUrl.startsWith('data:image')) {
@@ -42,8 +57,16 @@ function compressDataUrl(dataUrl) {
 
 const filesToAttachments = async (files) => {
   const list = Array.from(files || [])
+  if (!list.length) return []
+  if (API_BASE) {
+    try {
+      return await Promise.all(list.map((file) => uploadOneToServer(file)))
+    } catch (e) {
+      console.warn('Server-Upload fehlgeschlagen, Fallback auf lokale Speicherung', e)
+    }
+  }
   const readOne = async (file) => {
-    const dataUrl = await new Promise((resolve, reject) => {
+    const dataUrl = await new Promise((resolve) => {
       const reader = new FileReader()
       reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '')
       reader.onerror = () => resolve('')
@@ -113,19 +136,35 @@ const defaultAuftrag = {
 }
 
 function useAuftraege() {
-  const [auftraege, setAuftraege] = useState(() => {
+  const [auftraege, setAuftraege] = useState([])
+  const [loaded, setLoaded] = useState(false)
+
+  useEffect(() => {
+    if (API_BASE) {
+      fetch(`${API_BASE}/api/auftraege`)
+        .then((r) => r.json())
+        .then((list) => setAuftraege(Array.isArray(list) ? list : []))
+        .catch(() => setAuftraege([]))
+        .finally(() => setLoaded(true))
+      return
+    }
     try {
       const raw = window.localStorage.getItem(STORAGE_AUFTRAEGE)
-      return raw ? JSON.parse(raw) : []
+      setAuftraege(raw ? JSON.parse(raw) : [])
     } catch {
-      return []
+      setAuftraege([])
     }
-  })
+    setLoaded(true)
+  }, [])
+
   useEffect(() => {
-    if (!auftraege?.length) {
-      try {
-        window.localStorage.setItem(STORAGE_AUFTRAEGE, JSON.stringify(auftraege))
-      } catch {}
+    if (!loaded) return
+    if (API_BASE) {
+      fetch(`${API_BASE}/api/auftraege`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(auftraege),
+      }).catch(() => {})
       return
     }
     try {
@@ -142,12 +181,12 @@ function useAuftraege() {
         } catch {}
       }
     }
-  }, [auftraege])
-  return [auftraege, setAuftraege]
+  }, [auftraege, loaded])
+  return [auftraege, setAuftraege, loaded]
 }
 
 function AuftragListe() {
-  const [auftraege, setAuftraege] = useAuftraege()
+  const [auftraege, setAuftraege, loaded] = useAuftraege()
   const [form, setForm] = useState({
     strasse: '',
     hausnummer: '',
@@ -234,7 +273,7 @@ function AuftragListe() {
   const renderAuftragListenItem = (a) => {
     const fotos = a.dokumentationFotos || []
     const hasFotos = fotos.length > 0
-    const firstThumb = hasFotos && fotos[0].dataUrl ? fotos[0].dataUrl : null
+    const firstThumb = hasFotos ? getAttachmentSrc(fotos[0]) : null
     return (
       <li key={a.id} className="list-item">
         <div>
@@ -257,8 +296,8 @@ function AuftragListe() {
               title={`${fotos.length} Foto(s) anzeigen`}
               aria-label="Fotos anzeigen"
             >
-            {firstThumb ? (
-              <img src={firstThumb} alt="" className="foto-thumb" />
+            {(firstThumb && (firstThumb.startsWith('data:') || firstThumb.startsWith('http'))) ? (
+              <img src={firstThumb} alt="" className="foto-thumb" crossOrigin="anonymous" />
             ) : (
               <span className="foto-thumb-icon">📷</span>
             )}
@@ -692,8 +731,9 @@ function AuftragListe() {
 
         <section className="card">
           <h2>Auftragsliste</h2>
-          {auftraege.length === 0 && <p className="muted">Noch keine Aufträge erfasst.</p>}
-          {auftraege.length > 0 && (
+          {!loaded && API_BASE && <p className="muted">Laden…</p>}
+          {loaded && auftraege.length === 0 && <p className="muted">Noch keine Aufträge erfasst.</p>}
+          {loaded && auftraege.length > 0 && (
             <>
               <p className="muted">
                 Offene Aufträge: {offeneAuftraege.length} · Abgeschlossen: {abgeschlosseneAuftraege.length} ·{' '}
@@ -742,9 +782,10 @@ function AuftragListe() {
               </button>
             )}
             <img
-              src={fotoViewer.fotos[fotoViewer.currentIndex]?.dataUrl}
+              src={getAttachmentSrc(fotoViewer.fotos[fotoViewer.currentIndex])}
               alt=""
               className="foto-lightbox-img"
+              crossOrigin="anonymous"
             />
             {fotoViewer.fotos.length > 1 && (
               <button type="button" className="foto-lightbox-next" onClick={nextFoto} aria-label="Nächstes Foto">
@@ -767,18 +808,25 @@ function AuftragDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const isNeu = id === 'neu'
-  const [auftraege, setAuftraege] = useAuftraege()
+  const [auftraege, setAuftraege, loaded] = useAuftraege()
   const kameraInputRef = useRef(null)
-  const [auftrag, setAuftrag] = useState(() => {
-    if (isNeu) return { ...defaultAuftrag }
-    const found = (auftraege || []).find((a) => String(a.id) === String(id))
-    return found ? { ...defaultAuftrag, ...found } : null
-  })
+  const [auftrag, setAuftrag] = useState(null)
 
   useEffect(() => {
-    if (!isNeu && !auftrag) navigate('/', { replace: true })
-  }, [isNeu, auftrag, navigate])
+    if (!loaded) return
+    if (isNeu) {
+      setAuftrag({ ...defaultAuftrag })
+      return
+    }
+    const found = (auftraege || []).find((a) => String(a.id) === String(id))
+    setAuftrag(found ? { ...defaultAuftrag, ...found } : null)
+  }, [loaded, isNeu, id, auftraege])
 
+  useEffect(() => {
+    if (loaded && !isNeu && auftrag === null) navigate('/', { replace: true })
+  }, [loaded, isNeu, auftrag, navigate])
+
+  if (!loaded) return <div className="page"><p className="muted" style={{ padding: '2rem' }}>Laden…</p></div>
   if (!auftrag) return null
 
   const speichern = () => {
