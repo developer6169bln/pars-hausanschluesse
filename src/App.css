@@ -114,6 +114,16 @@ textarea {
   border-color: #2563eb;
   color: #1d4ed8;
 }
+.btn-delete {
+  background: transparent;
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+.btn-delete:hover {
+  border-color: #dc2626;
+  background: #fef2f2;
+  color: #b91c1c;
+}
 .list {
   list-style: none;
   padding: 0;

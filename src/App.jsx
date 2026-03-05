@@ -270,6 +270,11 @@ function AuftragListe() {
       currentIndex: (v.currentIndex - 1 + v.fotos.length) % v.fotos.length,
     }))
 
+  const deleteAuftrag = (auftragId, bezeichnung) => {
+    if (!window.confirm(`Auftrag „${bezeichnung || auftragId}“ wirklich löschen?`)) return
+    setAuftraege((list) => list.filter((a) => String(a.id) !== String(auftragId)))
+  }
+
   const renderAuftragListenItem = (a) => {
     const fotos = a.dokumentationFotos || []
     const hasFotos = fotos.length > 0
@@ -307,6 +312,15 @@ function AuftragListe() {
           <Link className="btn ghost" to={`/auftrag/${a.id}`}>
             Bearbeiten
           </Link>
+          <button
+            type="button"
+            className="btn btn-delete"
+            onClick={() => deleteAuftrag(a.id, a.bezeichnung)}
+            title="Auftrag löschen"
+            aria-label="Löschen"
+          >
+            Löschen
+          </button>
         </div>
       </li>
     )
