@@ -819,12 +819,12 @@ function AuftragDetail() {
       return
     }
     const found = (auftraege || []).find((a) => String(a.id) === String(id))
-    setAuftrag(found ? { ...defaultAuftrag, ...found } : null)
-  }, [loaded, isNeu, id, auftraege])
-
-  useEffect(() => {
-    if (loaded && !isNeu && auftrag === null) navigate('/', { replace: true })
-  }, [loaded, isNeu, auftrag, navigate])
+    if (found) {
+      setAuftrag({ ...defaultAuftrag, ...found })
+    } else {
+      navigate('/', { replace: true })
+    }
+  }, [loaded, isNeu, id, auftraege, navigate])
 
   if (!loaded) return <div className="page"><p className="muted" style={{ padding: '2rem' }}>Laden…</p></div>
   if (!auftrag) return null
