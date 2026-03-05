@@ -67,6 +67,7 @@ const defaultAuftrag = {
   besonderheiten: '',
   rohrbelegung: '',
   uebersichtsplanReferenz: '',
+  uebersichtsplanDownloadUrl: '',
   ausfuehrungBeginn: '',
   ausfuehrungEnde: '',
   kolonne: '',
@@ -109,11 +110,13 @@ function AuftragListe() {
     messungSonstiges: '',
     notizen: '',
     abgeschlossen: false,
+    uebersichtsplanDownloadUrl: '',
   })
   const [importVorschau, setImportVorschau] = useState([])
 
   const standortSpeichern = async () => {
     if (!('geolocation' in navigator)) return
+    // Bei Mobilgeräten fragt der Browser hier die Standortberechtigung ab
     const pos = await new Promise((resolve, reject) => {
       navigator.geolocation.getCurrentPosition(resolve, reject, {
         enableHighAccuracy: true,
@@ -328,6 +331,7 @@ function AuftragListe() {
       abgeschlossen: !!form.abgeschlossen,
       auftragsDateien: form.auftragsDateien,
       dokumentationFotos: form.dokumentationFotos,
+      uebersichtsplanDownloadUrl: form.uebersichtsplanDownloadUrl.trim(),
     }
     setAuftraege((a) => [neu, ...a])
     setForm({
@@ -349,6 +353,7 @@ function AuftragListe() {
       messungSonstiges: '',
       notizen: '',
       abgeschlossen: false,
+      uebersichtsplanDownloadUrl: '',
     })
   }
 
@@ -455,7 +460,7 @@ function AuftragListe() {
           <div className="row">
             <label>
               Standort (GPS)
-              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
                 <button
                   className="btn ghost"
                   type="button"
@@ -470,6 +475,9 @@ function AuftragListe() {
                     : '—'}
                 </span>
               </div>
+              <p className="muted" style={{ marginTop: '0.35rem', fontSize: '0.8rem' }}>
+                Beim ersten Klick wird die Standortberechtigung angefragt (z. B. auf dem Handy: „Standort zulassen“).
+              </p>
             </label>
           </div>
           <div className="row">
@@ -495,6 +503,17 @@ function AuftragListe() {
                   const atts = await filesToAttachments(e.target.files)
                   setForm((f) => ({ ...f, dokumentationFotos: atts }))
                 }}
+              />
+            </label>
+          </div>
+          <div className="row">
+            <label>
+              Übersichtsplan Download-Link
+              <input
+                type="url"
+                value={form.uebersichtsplanDownloadUrl}
+                onChange={(e) => setForm((f) => ({ ...f, uebersichtsplanDownloadUrl: e.target.value }))}
+                placeholder="https://…"
               />
             </label>
           </div>
@@ -712,46 +731,7 @@ function AuftragDetail() {
         </section>
 
         <section className="card">
-          <h2>2. Tiefbau / Trasse</h2>
-          <div className="row">
-            <label>
-              Trasse von
-              <input
-                type="text"
-                value={auftrag.trasseVon}
-                onChange={(e) => setAuftrag((p) => ({ ...p, trasseVon: e.target.value }))}
-              />
-            </label>
-            <label>
-              Trasse bis
-              <input
-                type="text"
-                value={auftrag.trasseBis}
-                onChange={(e) => setAuftrag((p) => ({ ...p, trasseBis: e.target.value }))}
-              />
-            </label>
-            <label>
-              Bauart
-              <input
-                type="text"
-                value={auftrag.bauart}
-                onChange={(e) => setAuftrag((p) => ({ ...p, bauart: e.target.value }))}
-                placeholder="offener Graben, Spülbohrung, Pflasteraufnahme …"
-              />
-            </label>
-          </div>
-          <label>
-            Besonderheiten / Hindernisse
-            <textarea
-              rows={2}
-              value={auftrag.besonderheiten}
-              onChange={(e) => setAuftrag((p) => ({ ...p, besonderheiten: e.target.value }))}
-            />
-          </label>
-        </section>
-
-        <section className="card">
-          <h2>3. Rohrbelegung & Übersichtsplan</h2>
+          <h2>2. Rohrbelegung & Übersichtsplan</h2>
           <label>
             Rohrbelegung (z. B. Rohr 1 = GF, Rohr 2 = Reserve)
             <textarea
@@ -764,107 +744,37 @@ function AuftragDetail() {
             Übersichtsplan‑Referenz
             <input
               type="text"
-              value={auftrag.uebersichtsplanReferenz}
+              value={auftrag.uebersichtsplanReferenz ?? ''}
               onChange={(e) => setAuftrag((p) => ({ ...p, uebersichtsplanReferenz: e.target.value }))}
               placeholder="Plannummer, Datei‑Link oder DMS‑Referenz"
             />
           </label>
-        </section>
-
-        <section className="card">
-          <h2>3a. Technische Daten / Rohrverband</h2>
-          <div className="row">
-            <label>
-              SNR / Nr.
-              <input
-                type="text"
-                value={auftrag.sNr}
-                onChange={(e) => setAuftrag((p) => ({ ...p, sNr: e.target.value }))}
-                placeholder="laufende Rohrnummer"
-              />
-            </label>
-            <label>
-              BP-Einf. (Baupunkt Einführung)
-              <input
-                type="text"
-                value={auftrag.bpEinf ?? ''}
-                onChange={(e) => setAuftrag((p) => ({ ...p, bpEinf: e.target.value }))}
-                placeholder="Baupunkt Einführung"
-              />
-            </label>
-            <label>
-              Bauabschnitt / hav
-              <input
-                type="text"
-                value={auftrag.hav}
-                onChange={(e) => setAuftrag((p) => ({ ...p, hav: e.target.value }))}
-                placeholder="z. B. hav 91–95"
-              />
-            </label>
-            <label>
-              Rohrverband / SN-RV
-              <input
-                type="text"
-                value={auftrag.rohrverband}
-                onChange={(e) => setAuftrag((p) => ({ ...p, rohrverband: e.target.value }))}
-                placeholder="z. B. 22x7 + 1x12 (O)"
-              />
-            </label>
-          </div>
-          <div className="row">
-            <label>
-              Mikrorohr‑Code / Belegung
-              <input
-                type="text"
-                value={auftrag.rohrCode}
-                onChange={(e) => setAuftrag((p) => ({ ...p, rohrCode: e.target.value }))}
-                placeholder="z. B. rt/1, gn/2, rt-/13 …"
-              />
-            </label>
-          </div>
-          <div className="row">
-            <label>
-              Kabellänge (m)
-              <input
-                type="text"
-                value={auftrag.kabellaenge}
-                onChange={(e) => setAuftrag((p) => ({ ...p, kabellaenge: e.target.value }))}
-              />
-            </label>
-            <label>
-              Haushalte (HH)
-              <input
-                type="text"
-                value={auftrag.hh}
-                onChange={(e) => setAuftrag((p) => ({ ...p, hh: e.target.value }))}
-              />
-            </label>
-            <label>
-              KLS / APL‑ID
-              <input
-                type="text"
-                value={auftrag.klsId}
-                onChange={(e) => setAuftrag((p) => ({ ...p, klsId: e.target.value }))}
-              />
-            </label>
-          </div>
           <label>
-            Ausbauzustand
+            Übersichtsplan Download-Link
             <input
-              type="text"
-              value={auftrag.ausbauzustand}
-              onChange={(e) => setAuftrag((p) => ({ ...p, ausbauzustand: e.target.value }))}
-              placeholder="z. B. passed+"
+              type="url"
+              value={auftrag.uebersichtsplanDownloadUrl ?? ''}
+              onChange={(e) => setAuftrag((p) => ({ ...p, uebersichtsplanDownloadUrl: e.target.value }))}
+              placeholder="https://…"
             />
           </label>
-          <p className="muted" style={{ marginTop: '0.75rem' }}>
-            Farbcode‑Legende: rt=rot, gn=grün, bl=blau, ge=gelb, ws=weiß, gr=grau, br=braun, vi=violett, tk=türkis,
-            sw=schwarz, or=orange, rs=rosa. „rt-/13“ = zweites Bündel, Rohr 13, Farbe rot.
-          </p>
+          {(auftrag.uebersichtsplanDownloadUrl || '').trim() && (
+            <p style={{ marginTop: '0.5rem' }}>
+              <a
+                href={auftrag.uebersichtsplanDownloadUrl.trim()}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn ghost"
+                style={{ display: 'inline-block' }}
+              >
+                Übersichtsplan herunterladen
+              </a>
+            </p>
+          )}
         </section>
 
         <section className="card">
-          <h2>4. Ausführung / Dokumentation</h2>
+          <h2>3. Ausführung / Dokumentation</h2>
           <div className="row">
             <label>
               Ausführung Beginn
@@ -933,7 +843,7 @@ function AuftragDetail() {
         </section>
 
         <section className="card">
-          <h2>5. Aufmaß / Geoace (nur Referenz)</h2>
+          <h2>4. Aufmaß / Geoace (nur Referenz)</h2>
           <div className="row">
             <label>
               Geoace‑Vorgangsnummer
@@ -975,7 +885,7 @@ function AuftragDetail() {
         </section>
 
         <section className="card">
-          <h2>6. Messung & Abschluss</h2>
+          <h2>5. Messung & Abschluss</h2>
           <div className="row">
             <label>
               GEO ACE Messung
