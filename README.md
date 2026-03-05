@@ -13,11 +13,11 @@ Webapp für die Erfassung und Dokumentation von Glasfaser-Hausanschlüssen (Tief
    ```bash
    npm run server
    ```
-   Server läuft auf Port 3001.
+   Server läuft auf Port 3010.
 
 2. **Umgebungsvariable setzen**: Erstelle `.env` (siehe `.env.example`):
    ```
-   VITE_API_URL=http://localhost:3001
+   VITE_API_URL=http://localhost:3010
    ```
    Bei Produktion: `VITE_API_URL=https://deine-domain.de`
 

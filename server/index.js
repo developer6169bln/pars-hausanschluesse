@@ -7,7 +7,7 @@ import { fileURLToPath } from 'url'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const UPLOAD_DIR = path.join(__dirname, 'uploads')
 const AUFTRAEGE_FILE = path.join(__dirname, 'auftraege.json')
-const PORT = process.env.PORT || 3001
+const PORT = process.env.PORT || 3010
 const API_BASE = process.env.API_BASE || `http://localhost:${PORT}`
 
 if (!fs.existsSync(UPLOAD_DIR)) {

@@ -140,29 +140,48 @@ const defaultAuftrag = {
 function useAuftraegeState() {
   const [auftraege, setAuftraege] = useState([])
   const [loaded, setLoaded] = useState(false)
+  const [fetchError, setFetchError] = useState(false)
+  const [reloadKey, setReloadKey] = useState(0)
+
+  const reload = () => {
+    setLoaded(false)
+    setFetchError(false)
+    setReloadKey((k) => k + 1)
+  }
 
   useEffect(() => {
     if (!API_BASE) {
       setAuftraege([])
       setLoaded(true)
+      setFetchError(false)
       return
     }
+    setFetchError(false)
     fetch(`${API_BASE}/api/auftraege`)
-      .then((r) => r.json())
-      .then((list) => setAuftraege(Array.isArray(list) ? list : []))
-      .catch(() => setAuftraege([]))
+      .then((r) => {
+        if (!r.ok) throw new Error('Server fehlgeschlagen')
+        return r.json()
+      })
+      .then((list) => {
+        setAuftraege(Array.isArray(list) ? list : [])
+        setFetchError(false)
+      })
+      .catch(() => {
+        setAuftraege([])
+        setFetchError(true)
+      })
       .finally(() => setLoaded(true))
-  }, [])
+  }, [reloadKey])
 
   useEffect(() => {
-    if (!loaded || !API_BASE) return
+    if (!loaded || !API_BASE || fetchError) return
     fetch(`${API_BASE}/api/auftraege`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(auftraege),
     }).catch(() => {})
   }, [auftraege, loaded])
-  return [auftraege, setAuftraege, loaded]
+  return [auftraege, setAuftraege, loaded, fetchError, reload]
 }
 
 function AuftraegeProvider({ children }) {
@@ -177,7 +196,7 @@ function useAuftraege() {
 }
 
 function AuftragListe() {
-  const [auftraege, setAuftraege, loaded] = useAuftraege()
+  const [auftraege, setAuftraege, loaded, fetchError, reload] = useAuftraege()
   const [form, setForm] = useState({
     strasse: '',
     hausnummer: '',
@@ -738,9 +757,15 @@ function AuftragListe() {
           <h2>Auftragsliste</h2>
           {API_BASE && <p className="muted" style={{ marginTop: '-0.25rem', marginBottom: '0.5rem' }}>Gemeinsamer Auftragspool – für alle Nutzer sichtbar und bearbeitbar.</p>}
           {!loaded && API_BASE && <p className="muted">Laden…</p>}
-          {loaded && !API_BASE && auftraege.length === 0 && <p className="muted">Ohne Server keine Aufträge. Bitte VITE_API_URL setzen und Server starten.</p>}
-          {loaded && API_BASE && auftraege.length === 0 && <p className="muted">Noch keine Aufträge erfasst.</p>}
-          {loaded && auftraege.length > 0 && (
+          {loaded && fetchError && (
+            <div className="server-error" role="alert">
+              <p>Server nicht erreichbar. Bitte in einem Terminal <code>npm run server</code> starten (Port 3010). In <code>.env</code> muss <code>VITE_API_URL=http://localhost:3010</code> stehen – danach Dev-Server neu starten (<code>npm run dev</code>).</p>
+              <button type="button" className="btn primary" onClick={reload}>Erneut laden</button>
+            </div>
+          )}
+          {loaded && !API_BASE && auftraege.length === 0 && <p className="muted">Ohne Server keine Aufträge. Bitte VITE_API_URL in .env setzen und Server starten.</p>}
+          {loaded && API_BASE && !fetchError && auftraege.length === 0 && <p className="muted">Noch keine Aufträge erfasst.</p>}
+          {loaded && !fetchError && auftraege.length > 0 && (
             <>
               <p className="muted">
                 Offene Aufträge: {offeneAuftraege.length} · Abgeschlossen: {abgeschlosseneAuftraege.length} ·{' '}
@@ -834,9 +859,6 @@ function AuftragDetail() {
     }
   }, [loaded, isNeu, id, auftraege, navigate])
 
-  if (!loaded) return <div className="page"><p className="muted" style={{ padding: '2rem' }}>Laden…</p></div>
-  if (!auftrag) return <div className="page"><p className="muted" style={{ padding: '2rem' }}>Auftrag wird geladen…</p></div>
-
   const speichern = () => {
     const adr = (auftrag.adresse || '').trim() || (auftrag.strasse && auftrag.hausnummer ? `${auftrag.strasse} ${auftrag.hausnummer}`.trim() : '')
     if (!(auftrag.bezeichnung || '').trim()) return
@@ -876,23 +898,27 @@ function AuftragDetail() {
 
   return (
     <div className="page">
-      <header className="topbar">
-        <Link to="/" className="link-back">
-          ← Zurück zur Übersicht
-        </Link>
-        <div className="logo">
-          <img
-            src="https://parsbau.de/wp-content/uploads/2023/10/logo-pars22-e1696588277925.jpg"
-            alt="PARS Bau Logo"
-          />
-        </div>
-        <h1>Hausanschluss – Auftrag</h1>
-        <p className="subtitle">
-          Auftragseingang, Trasse, Rohrbelegung, Übersichtsplan, Ausführung und Aufmaß (Geoace nur als Referenz).
-        </p>
-      </header>
+      {!loaded && <p className="muted" style={{ padding: '2rem' }}>Laden…</p>}
+      {loaded && !auftrag && <p className="muted" style={{ padding: '2rem' }}>Auftrag wird geladen…</p>}
+      {loaded && auftrag && (
+        <>
+          <header className="topbar">
+            <Link to="/" className="link-back">
+              ← Zurück zur Übersicht
+            </Link>
+            <div className="logo">
+              <img
+                src="https://parsbau.de/wp-content/uploads/2023/10/logo-pars22-e1696588277925.jpg"
+                alt="PARS Bau Logo"
+              />
+            </div>
+            <h1>Hausanschluss – Auftrag</h1>
+            <p className="subtitle">
+              Auftragseingang, Trasse, Rohrbelegung, Übersichtsplan, Ausführung und Aufmaß (Geoace nur als Referenz).
+            </p>
+          </header>
 
-      <main className="content">
+          <main className="content">
         <section className="card">
           <h2>1. Auftragseingang / Stammdaten</h2>
           <div className="row">
@@ -1188,7 +1214,9 @@ function AuftragDetail() {
         <button className="btn primary" type="button" onClick={speichern} disabled={saveStatus === 'gespeichert'}>
           Auftrag speichern
         </button>
-      </main>
+          </main>
+        </>
+      )}
     </div>
   )
 }

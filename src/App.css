@@ -224,6 +224,20 @@ textarea {
   padding: 0.15rem 0.35rem;
   border-radius: 4px;
 }
+.server-error {
+  padding: 0.75rem 1rem;
+  background: #fef2f2;
+  color: #b91c1c;
+  border-radius: 0.5rem;
+  font-size: 0.9rem;
+}
+.server-error p { margin: 0 0 0.75rem 0; }
+.server-error code {
+  background: rgba(255,255,255,0.7);
+  padding: 0.15rem 0.35rem;
+  border-radius: 4px;
+}
+.server-error .btn { margin-top: 0.25rem; }
 
 /* Foto-Lightbox */
 .foto-lightbox {
