@@ -69,7 +69,9 @@ const defaultAuftrag = {
   uebersichtsplanReferenz: '',
   uebersichtsplanDownloadUrl: '',
   ausfuehrungBeginn: '',
+  ausfuehrungBeginnUhrzeit: '',
   ausfuehrungEnde: '',
+  ausfuehrungEndeUhrzeit: '',
   kolonne: '',
   ausfuehrungDokumentation: '',
   geoaceVorgang: '',
@@ -148,24 +150,64 @@ function AuftragListe() {
   const summeAbgeschlossen = abgeschlosseneAuftraege.reduce((sum, a) => sum + parseLaenge(a), 0)
   const summeGesamt = summeOffen + summeAbgeschlossen
 
-  const renderAuftragListenItem = (a) => (
-    <li key={a.id} className="list-item">
-      <div>
-        <div className="item-title">{a.bezeichnung}</div>
-        <div className="item-sub">
-          {a.adresse}
-          {a.ort ? `, ${a.ort}` : ''}
-          {a.netzbetreiber ? ` · ${a.netzbetreiber}` : ''}
-          {a.aufmassLaenge && (
-            <> · Länge: {String(a.aufmassLaenge).replace('.', ',')} m</>
-          )}
+  const [fotoViewer, setFotoViewer] = useState({ open: false, fotos: [], currentIndex: 0 })
+  const openFotos = (fotos) => {
+    if (!fotos?.length) return
+    setFotoViewer({ open: true, fotos, currentIndex: 0 })
+  }
+  const closeFotos = () => setFotoViewer((v) => ({ ...v, open: false }))
+  const nextFoto = () =>
+    setFotoViewer((v) => ({
+      ...v,
+      currentIndex: (v.currentIndex + 1) % v.fotos.length,
+    }))
+  const prevFoto = () =>
+    setFotoViewer((v) => ({
+      ...v,
+      currentIndex: (v.currentIndex - 1 + v.fotos.length) % v.fotos.length,
+    }))
+
+  const renderAuftragListenItem = (a) => {
+    const fotos = a.dokumentationFotos || []
+    const hasFotos = fotos.length > 0
+    const firstThumb = hasFotos && fotos[0].dataUrl ? fotos[0].dataUrl : null
+    return (
+      <li key={a.id} className="list-item">
+        <div>
+          <div className="item-title">{a.bezeichnung}</div>
+          <div className="item-sub">
+            {a.adresse}
+            {a.ort ? `, ${a.ort}` : ''}
+            {a.netzbetreiber ? ` · ${a.netzbetreiber}` : ''}
+            {a.aufmassLaenge && (
+              <> · Länge: {String(a.aufmassLaenge).replace('.', ',')} m</>
+            )}
+          </div>
         </div>
-      </div>
-      <Link className="btn ghost" to={`/auftrag/${a.id}`}>
-        Bearbeiten
-      </Link>
-    </li>
-  )
+        <div className="list-item-actions">
+          {hasFotos && (
+            <button
+              type="button"
+              className="foto-thumb-btn"
+              onClick={() => openFotos(fotos)}
+              title={`${fotos.length} Foto(s) anzeigen`}
+              aria-label="Fotos anzeigen"
+            >
+            {firstThumb ? (
+              <img src={firstThumb} alt="" className="foto-thumb" />
+            ) : (
+              <span className="foto-thumb-icon">📷</span>
+            )}
+            {fotos.length > 1 && <span className="foto-count">{fotos.length}</span>}
+          </button>
+          )}
+          <Link className="btn ghost" to={`/auftrag/${a.id}`}>
+            Bearbeiten
+          </Link>
+        </div>
+      </li>
+    )
+  }
 
   const parseTableText = (text) => {
     const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
@@ -617,6 +659,36 @@ function AuftragListe() {
           )}
         </section>
       </main>
+
+      {fotoViewer.open && fotoViewer.fotos.length > 0 && (
+        <div className="foto-lightbox" onClick={closeFotos} role="dialog" aria-modal="true" aria-label="Foto anzeigen">
+          <button type="button" className="foto-lightbox-close" onClick={closeFotos} aria-label="Schließen">
+            ×
+          </button>
+          <div className="foto-lightbox-inner" onClick={(e) => e.stopPropagation()}>
+            {fotoViewer.fotos.length > 1 && (
+              <button type="button" className="foto-lightbox-prev" onClick={prevFoto} aria-label="Vorheriges Foto">
+                ‹
+              </button>
+            )}
+            <img
+              src={fotoViewer.fotos[fotoViewer.currentIndex]?.dataUrl}
+              alt=""
+              className="foto-lightbox-img"
+            />
+            {fotoViewer.fotos.length > 1 && (
+              <button type="button" className="foto-lightbox-next" onClick={nextFoto} aria-label="Nächstes Foto">
+                ›
+              </button>
+            )}
+          </div>
+          {fotoViewer.fotos.length > 1 && (
+            <p className="foto-lightbox-counter">
+              {fotoViewer.currentIndex + 1} / {fotoViewer.fotos.length}
+            </p>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -777,26 +849,42 @@ function AuftragDetail() {
           <h2>3. Ausführung / Dokumentation</h2>
           <div className="row">
             <label>
-              Ausführung Beginn
+              Ausführung Beginn (Datum)
               <input
                 type="date"
-                value={auftrag.ausfuehrungBeginn}
+                value={auftrag.ausfuehrungBeginn ?? ''}
                 onChange={(e) => setAuftrag((p) => ({ ...p, ausfuehrungBeginn: e.target.value }))}
               />
             </label>
             <label>
-              Ausführung Ende
+              Ausführung Beginn (Uhrzeit)
+              <input
+                type="time"
+                value={auftrag.ausfuehrungBeginnUhrzeit ?? ''}
+                onChange={(e) => setAuftrag((p) => ({ ...p, ausfuehrungBeginnUhrzeit: e.target.value }))}
+              />
+            </label>
+            <label>
+              Ausführung Ende (Datum)
               <input
                 type="date"
-                value={auftrag.ausfuehrungEnde}
+                value={auftrag.ausfuehrungEnde ?? ''}
                 onChange={(e) => setAuftrag((p) => ({ ...p, ausfuehrungEnde: e.target.value }))}
+              />
+            </label>
+            <label>
+              Ausführung Ende (Uhrzeit)
+              <input
+                type="time"
+                value={auftrag.ausfuehrungEndeUhrzeit ?? ''}
+                onChange={(e) => setAuftrag((p) => ({ ...p, ausfuehrungEndeUhrzeit: e.target.value }))}
               />
             </label>
             <label>
               Kolonne / Trupp
               <input
                 type="text"
-                value={auftrag.kolonne}
+                value={auftrag.kolonne ?? ''}
                 onChange={(e) => setAuftrag((p) => ({ ...p, kolonne: e.target.value }))}
               />
             </label>

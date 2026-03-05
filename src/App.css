@@ -128,7 +128,50 @@ textarea {
   align-items: center;
   gap: 0.75rem;
   padding: 0.55rem 0;
-  border-bottom: 1px solid #111827;
+  border-bottom: 1px solid #e5e7eb;
+}
+.list-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.foto-thumb-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #f8fafc;
+  cursor: pointer;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.foto-thumb-btn:hover {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+.foto-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.foto-thumb-icon {
+  font-size: 1.1rem;
+}
+.foto-count {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  font-size: 0.65rem;
+  background: #1d4ed8;
+  color: #fff;
+  padding: 0.1rem 0.25rem;
+  border-radius: 4px;
+  line-height: 1;
 }
 .item-title {
   font-size: 0.95rem;
@@ -141,6 +184,78 @@ textarea {
 .muted {
   font-size: 0.85rem;
   color: #9ca3af;
+}
+
+/* Foto-Lightbox */
+.foto-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+}
+.foto-lightbox-close {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  width: 44px;
+  height: 44px;
+  border: none;
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  font-size: 1.75rem;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 50%;
+}
+.foto-lightbox-close:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+.foto-lightbox-inner {
+  position: relative;
+  max-width: 100%;
+  max-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.foto-lightbox-img {
+  max-width: 100%;
+  max-height: 85vh;
+  object-fit: contain;
+}
+.foto-lightbox-prev,
+.foto-lightbox-next {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 44px;
+  height: 44px;
+  border: none;
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  font-size: 2rem;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 8px;
+}
+.foto-lightbox-prev { left: 0.5rem; }
+.foto-lightbox-next { right: 0.5rem; }
+.foto-lightbox-prev:hover,
+.foto-lightbox-next:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+.foto-lightbox-counter {
+  position: absolute;
+  bottom: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.9rem;
 }
 
 @media (max-width: 768px) {
