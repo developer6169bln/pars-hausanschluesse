@@ -212,6 +212,18 @@ textarea {
   border-radius: 0.5rem;
   font-weight: 500;
 }
+.server-hint {
+  padding: 0.6rem 1rem;
+  background: #dbeafe;
+  color: #1e40af;
+  font-size: 0.9rem;
+  text-align: center;
+}
+.server-hint code {
+  background: rgba(255,255,255,0.6);
+  padding: 0.15rem 0.35rem;
+  border-radius: 4px;
+}
 
 /* Foto-Lightbox */
 .foto-lightbox {

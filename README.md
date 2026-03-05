@@ -5,18 +5,9 @@ Webapp für die Erfassung und Dokumentation von Glasfaser-Hausanschlüssen (Tief
 ## Technologie
 
 - React, Vite
-- Optional: Node/Express-Server für **Bilder, Dokumente und Fotos** sowie **Auftragsliste** – dann für alle Nutzer sichtbar
+- **Auftragspool nur auf dem Server** – Aufträge werden nicht lokal, sondern zentral gespeichert. Alle Nutzer sehen und bearbeiten denselben Pool.
 
-## Start (nur App, lokale Speicherung)
-
-```bash
-npm install
-npm run dev
-```
-
-Öffne http://localhost:5180 (oder den angezeigten Port). Daten und Fotos liegen nur im Browser (localStorage).
-
-## Start mit Server (für alle Nutzer sichtbar)
+## Start (Auftragspool – Server erforderlich)
 
 1. **Server starten** (in einem Terminal):
    ```bash
@@ -35,7 +26,7 @@ npm run dev
    npm run dev
    ```
 
-Dann werden Fotos, PDFs und die Auftragsliste auf dem Server gespeichert; alle Nutzer sehen dieselben Daten und Dateien.
+Aufträge, Fotos und PDFs liegen nur auf dem Server; alle Nutzer arbeiten im gleichen Auftragspool. Ohne konfigurierten Server bleibt die Liste leer (Hinweis in der App).
 
 ## Build
 

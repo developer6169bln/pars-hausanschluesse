@@ -142,47 +142,25 @@ function useAuftraegeState() {
   const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
-    if (API_BASE) {
-      fetch(`${API_BASE}/api/auftraege`)
-        .then((r) => r.json())
-        .then((list) => setAuftraege(Array.isArray(list) ? list : []))
-        .catch(() => setAuftraege([]))
-        .finally(() => setLoaded(true))
+    if (!API_BASE) {
+      setAuftraege([])
+      setLoaded(true)
       return
     }
-    try {
-      const raw = window.localStorage.getItem(STORAGE_AUFTRAEGE)
-      setAuftraege(raw ? JSON.parse(raw) : [])
-    } catch {
-      setAuftraege([])
-    }
-    setLoaded(true)
+    fetch(`${API_BASE}/api/auftraege`)
+      .then((r) => r.json())
+      .then((list) => setAuftraege(Array.isArray(list) ? list : []))
+      .catch(() => setAuftraege([]))
+      .finally(() => setLoaded(true))
   }, [])
 
   useEffect(() => {
-    if (!loaded) return
-    if (API_BASE) {
-      fetch(`${API_BASE}/api/auftraege`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(auftraege),
-      }).catch(() => {})
-      return
-    }
-    try {
-      window.localStorage.setItem(STORAGE_AUFTRAEGE, JSON.stringify(auftraege))
-    } catch (e) {
-      if (e?.name === 'QuotaExceededError' || e?.code === 22) {
-        const ohneFotos = auftraege.map((a) => ({
-          ...a,
-          dokumentationFotos: (a.dokumentationFotos || []).map((f) => ({ ...f, dataUrl: '' })),
-          auftragsDateien: (a.auftragsDateien || []).map((f) => ({ ...f, dataUrl: '' })),
-        }))
-        try {
-          window.localStorage.setItem(STORAGE_AUFTRAEGE, JSON.stringify(ohneFotos))
-        } catch {}
-      }
-    }
+    if (!loaded || !API_BASE) return
+    fetch(`${API_BASE}/api/auftraege`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(auftraege),
+    }).catch(() => {})
   }, [auftraege, loaded])
   return [auftraege, setAuftraege, loaded]
 }
@@ -758,8 +736,10 @@ function AuftragListe() {
 
         <section className="card">
           <h2>Auftragsliste</h2>
+          {API_BASE && <p className="muted" style={{ marginTop: '-0.25rem', marginBottom: '0.5rem' }}>Gemeinsamer Auftragspool – für alle Nutzer sichtbar und bearbeitbar.</p>}
           {!loaded && API_BASE && <p className="muted">Laden…</p>}
-          {loaded && auftraege.length === 0 && <p className="muted">Noch keine Aufträge erfasst.</p>}
+          {loaded && !API_BASE && auftraege.length === 0 && <p className="muted">Ohne Server keine Aufträge. Bitte VITE_API_URL setzen und Server starten.</p>}
+          {loaded && API_BASE && auftraege.length === 0 && <p className="muted">Noch keine Aufträge erfasst.</p>}
           {loaded && auftraege.length > 0 && (
             <>
               <p className="muted">
@@ -1216,6 +1196,11 @@ function AuftragDetail() {
 export default function App() {
   return (
     <AuftraegeProvider>
+      {!API_BASE && (
+        <div className="server-hint" role="alert">
+          Auftragspool: Bitte Server starten (<code>npm run server</code>) und <code>VITE_API_URL</code> in .env setzen – dann sehen und bearbeiten alle Nutzer dieselben Aufträge.
+        </div>
+      )}
       <Routes>
         <Route path="/" element={<AuftragListe />} />
         <Route path="/auftrag/:id" element={<AuftragDetail />} />
