@@ -825,6 +825,7 @@ function AuftragDetail() {
   const [auftraege, setAuftraege, loaded] = useAuftraege()
   const kameraInputRef = useRef(null)
   const [auftrag, setAuftrag] = useState(null)
+  const [saveStatus, setSaveStatus] = useState('') // '' | 'gespeichert'
 
   useEffect(() => {
     if (!loaded) return
@@ -854,10 +855,10 @@ function AuftragDetail() {
       setAuftrag(neu)
       navigate(`/auftrag/${neueId}`, { replace: true })
     } else {
-      const id = auftrag.id
+      const auftragId = auftrag.id
       setAuftraege((list) =>
         list.map((a) => {
-          if (String(a.id) !== String(id)) return a
+          if (String(a.id) !== String(auftragId)) return a
           const merged = {
             ...defaultAuftrag,
             ...a,
@@ -870,8 +871,15 @@ function AuftragDetail() {
           return merged
         }),
       )
+      setSaveStatus('gespeichert')
     }
   }
+
+  useEffect(() => {
+    if (saveStatus !== 'gespeichert') return
+    const t = setTimeout(() => navigate('/', { replace: true }), 1800)
+    return () => clearTimeout(t)
+  }, [saveStatus, navigate])
 
   return (
     <div className="page">
@@ -1179,7 +1187,12 @@ function AuftragDetail() {
           </label>
         </section>
 
-        <button className="btn primary" type="button" onClick={speichern}>
+        {saveStatus === 'gespeichert' && (
+          <p className="save-success" role="status">
+            ✓ Gespeichert. Weiterleitung zur Übersicht…
+          </p>
+        )}
+        <button className="btn primary" type="button" onClick={speichern} disabled={saveStatus === 'gespeichert'}>
           Auftrag speichern
         </button>
       </main>

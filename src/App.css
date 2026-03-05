@@ -204,6 +204,14 @@ textarea {
   color: #dc2626;
   max-width: 280px;
 }
+.save-success {
+  margin: 0 0 0.75rem;
+  padding: 0.5rem 0.75rem;
+  background: #ecfdf5;
+  color: #059669;
+  border-radius: 0.5rem;
+  font-weight: 500;
+}
 
 /* Foto-Lightbox */
 .foto-lightbox {
