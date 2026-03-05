@@ -1198,7 +1198,7 @@ export default function App() {
     <AuftraegeProvider>
       {!API_BASE && (
         <div className="server-hint" role="alert">
-          Auftragspool: Bitte Server starten (<code>npm run server</code>) und <code>VITE_API_URL</code> in .env setzen – dann sehen und bearbeiten alle Nutzer dieselben Aufträge.
+          Auftragspool: Server starten (<code>npm run server</code>) und <code>VITE_API_URL</code> in .env eintragen – dann sehen und bearbeiten alle Nutzer dieselben Aufträge.
         </div>
       )}
       <Routes>
