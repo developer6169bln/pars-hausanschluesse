@@ -2,30 +2,62 @@ import { Routes, Route, Link, useNavigate, useParams } from 'react-router-dom'
 import { useState, useEffect, useRef } from 'react'
 
 const STORAGE_AUFTRAEGE = 'haus-auftraege'
+const MAX_IMAGE_WIDTH = 800
+const JPEG_QUALITY = 0.75
+
+function compressDataUrl(dataUrl) {
+  return new Promise((resolve) => {
+    if (!dataUrl || !dataUrl.startsWith('data:image')) {
+      resolve(dataUrl)
+      return
+    }
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.onload = () => {
+      const canvas = document.createElement('canvas')
+      let { width, height } = img
+      if (width > MAX_IMAGE_WIDTH) {
+        height = (height * MAX_IMAGE_WIDTH) / width
+        width = MAX_IMAGE_WIDTH
+      }
+      canvas.width = width
+      canvas.height = height
+      const ctx = canvas.getContext('2d')
+      if (!ctx) {
+        resolve(dataUrl)
+        return
+      }
+      ctx.drawImage(img, 0, 0, width, height)
+      try {
+        const compressed = canvas.toDataURL('image/jpeg', JPEG_QUALITY)
+        resolve(compressed)
+      } catch {
+        resolve(dataUrl)
+      }
+    }
+    img.onerror = () => resolve(dataUrl)
+    img.src = dataUrl
+  })
+}
 
 const filesToAttachments = async (files) => {
   const list = Array.from(files || [])
-  const readOne = (file) =>
-    new Promise((resolve) => {
+  const readOne = async (file) => {
+    const dataUrl = await new Promise((resolve, reject) => {
       const reader = new FileReader()
-      reader.onload = () =>
-        resolve({
-          name: file.name,
-          type: file.type,
-          size: file.size,
-          lastModified: file.lastModified,
-          dataUrl: typeof reader.result === 'string' ? reader.result : '',
-        })
-      reader.onerror = () =>
-        resolve({
-          name: file.name,
-          type: file.type,
-          size: file.size,
-          lastModified: file.lastModified,
-          dataUrl: '',
-        })
+      reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '')
+      reader.onerror = () => resolve('')
       reader.readAsDataURL(file)
     })
+    const compressed = await compressDataUrl(dataUrl)
+    return {
+      name: file.name,
+      type: file.type,
+      size: file.size,
+      lastModified: file.lastModified,
+      dataUrl: compressed,
+    }
+  }
   return await Promise.all(list.map(readOne))
 }
 
@@ -82,11 +114,34 @@ const defaultAuftrag = {
 
 function useAuftraege() {
   const [auftraege, setAuftraege] = useState(() => {
-    const raw = window.localStorage.getItem(STORAGE_AUFTRAEGE)
-    return raw ? JSON.parse(raw) : []
+    try {
+      const raw = window.localStorage.getItem(STORAGE_AUFTRAEGE)
+      return raw ? JSON.parse(raw) : []
+    } catch {
+      return []
+    }
   })
   useEffect(() => {
-    window.localStorage.setItem(STORAGE_AUFTRAEGE, JSON.stringify(auftraege))
+    if (!auftraege?.length) {
+      try {
+        window.localStorage.setItem(STORAGE_AUFTRAEGE, JSON.stringify(auftraege))
+      } catch {}
+      return
+    }
+    try {
+      window.localStorage.setItem(STORAGE_AUFTRAEGE, JSON.stringify(auftraege))
+    } catch (e) {
+      if (e?.name === 'QuotaExceededError' || e?.code === 22) {
+        const ohneFotos = auftraege.map((a) => ({
+          ...a,
+          dokumentationFotos: (a.dokumentationFotos || []).map((f) => ({ ...f, dataUrl: '' })),
+          auftragsDateien: (a.auftragsDateien || []).map((f) => ({ ...f, dataUrl: '' })),
+        }))
+        try {
+          window.localStorage.setItem(STORAGE_AUFTRAEGE, JSON.stringify(ohneFotos))
+        } catch {}
+      }
+    }
   }, [auftraege])
   return [auftraege, setAuftraege]
 }
@@ -115,26 +170,35 @@ function AuftragListe() {
     uebersichtsplanDownloadUrl: '',
   })
   const [importVorschau, setImportVorschau] = useState([])
+  const [standortStatus, setStandortStatus] = useState('') // '' | 'loading' | 'ok' | 'error'
 
   const standortSpeichern = async () => {
-    if (!('geolocation' in navigator)) return
-    // Bei Mobilgeräten fragt der Browser hier die Standortberechtigung ab
-    const pos = await new Promise((resolve, reject) => {
-      navigator.geolocation.getCurrentPosition(resolve, reject, {
-        enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 0,
+    if (!('geolocation' in navigator)) {
+      setStandortStatus('error')
+      return
+    }
+    setStandortStatus('loading')
+    try {
+      const pos = await new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 30000,
+          maximumAge: 0,
+        })
       })
-    })
-    setForm((f) => ({
-      ...f,
-      standort: {
+      const standort = {
         lat: pos.coords.latitude,
         lng: pos.coords.longitude,
-        accuracy: pos.coords.accuracy,
-        timestamp: pos.timestamp,
-      },
-    }))
+        accuracy: pos.coords.accuracy ?? 0,
+        timestamp: pos.timestamp ?? Date.now(),
+      }
+      setForm((f) => ({ ...f, standort }))
+      setStandortStatus('ok')
+      setTimeout(() => setStandortStatus(''), 3000)
+    } catch (err) {
+      setStandortStatus('error')
+      console.warn('Standort fehlgeschlagen', err)
+    }
   }
 
   const parseLaenge = (auftrag) => {
@@ -506,19 +570,25 @@ function AuftragListe() {
                 <button
                   className="btn ghost"
                   type="button"
-                  onClick={() => standortSpeichern().catch(() => {})}
-                  disabled={!('geolocation' in navigator)}
+                  onClick={standortSpeichern}
+                  disabled={!('geolocation' in navigator) || standortStatus === 'loading'}
                 >
-                  Standort speichern
+                  {standortStatus === 'loading' ? 'Wird ermittelt…' : 'Standort speichern'}
                 </button>
                 <span className="muted" style={{ fontSize: '0.9rem' }}>
                   {form.standort
                     ? `${form.standort.lat.toFixed(6)}, ${form.standort.lng.toFixed(6)} (±${Math.round(form.standort.accuracy)} m)`
                     : '—'}
                 </span>
+                {standortStatus === 'ok' && <span className="standort-ok">Standort übernommen.</span>}
+                {standortStatus === 'error' && (
+                  <span className="standort-error">
+                    Standort fehlgeschlagen. iPhone: Einstellungen → Datenschutz → Standort prüfen; „Standort zulassen“ beim ersten Klick tippen. Seite ggf. über HTTPS öffnen.
+                  </span>
+                )}
               </div>
               <p className="muted" style={{ marginTop: '0.35rem', fontSize: '0.8rem' }}>
-                Beim ersten Klick wird die Standortberechtigung angefragt (z. B. auf dem Handy: „Standort zulassen“).
+                Beim ersten Klick wird die Standortberechtigung angefragt (iPhone: „Standort zulassen“ tippen).
               </p>
             </label>
           </div>
@@ -712,16 +782,31 @@ function AuftragDetail() {
   if (!auftrag) return null
 
   const speichern = () => {
-    if (!auftrag.bezeichnung?.trim() || !auftrag.adresse?.trim()) return
+    const adr = (auftrag.adresse || '').trim() || (auftrag.strasse && auftrag.hausnummer ? `${auftrag.strasse} ${auftrag.hausnummer}`.trim() : '')
+    if (!(auftrag.bezeichnung || '').trim()) return
+    if (!adr) return
     if (isNeu) {
       const neueId = Date.now()
-      const neu = { ...auftrag, id: neueId }
+      const neu = { ...defaultAuftrag, ...auftrag, id: neueId, adresse: adr || auftrag.adresse }
       setAuftraege((list) => [neu, ...list])
       setAuftrag(neu)
       navigate(`/auftrag/${neueId}`, { replace: true })
     } else {
+      const id = auftrag.id
       setAuftraege((list) =>
-        list.map((a) => (String(a.id) === String(auftrag.id) ? { ...a, ...auftrag } : a)),
+        list.map((a) => {
+          if (String(a.id) !== String(id)) return a
+          const merged = {
+            ...defaultAuftrag,
+            ...a,
+            ...auftrag,
+            id: a.id,
+            adresse: adr || auftrag.adresse || a.adresse,
+            dokumentationFotos: Array.isArray(auftrag.dokumentationFotos) ? auftrag.dokumentationFotos : (a.dokumentationFotos || []),
+            auftragsDateien: Array.isArray(auftrag.auftragsDateien) ? auftrag.auftragsDateien : (a.auftragsDateien || []),
+          }
+          return merged
+        }),
       )
     }
   }

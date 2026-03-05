@@ -185,6 +185,15 @@ textarea {
   font-size: 0.85rem;
   color: #9ca3af;
 }
+.standort-ok {
+  font-size: 0.85rem;
+  color: #059669;
+}
+.standort-error {
+  font-size: 0.8rem;
+  color: #dc2626;
+  max-width: 280px;
+}
 
 /* Foto-Lightbox */
 .foto-lightbox {
