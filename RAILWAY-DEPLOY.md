@@ -12,30 +12,28 @@ So hostest du den Auftragspool-Server bei Railway (kostenlos nutzbar). Danach br
 - Repo auswählen: `pars-hausanschluesse` (oder dein Fork)
 - Railway erstellt ein neues Projekt und startet einen Build.
 
-## 3. Root-Verzeichnis und Start-Befehl
+## 3. Root-Verzeichnis, Build und Start
 
 - In der Service-Konfiguration (Settings):
   - **Root Directory:** leer lassen (Projekt-Root)
-  - **Build Command:** leer oder `npm install`
-  - **Start Command:** `npm run start` (startet den Server)
+  - **Build Command:** `npm run build` (baut das Frontend in `dist/`, damit die Startseite geliefert wird)
+  - **Start Command:** `npm run start` (startet den Server, der API + Frontend ausliefert)
   - **Watch Paths:** leer
+
+Die Datei `railway.json` setzt den Build-Befehl bereits. Falls die Startseite weiterhin 404 zeigt, unter **Settings → Build** prüfen, ob **Build Command** = `npm run build` ist.
 
 Railway nutzt automatisch die Variable **PORT** – der Server verwendet sie bereits.
 
-## 4. Umgebungsvariable für die öffentliche URL
+## 4. Umgebungsvariablen für die öffentliche URL
 
-Damit Upload-Links stimmen, muss der Server seine eigene URL kennen:
+Im Railway-Dashboard: deinen Service öffnen → **Variables**. Beide Variablen auf die **gleiche** öffentliche URL setzen (ohne Slash am Ende), z.B. `https://pars-hausanschluesse-production.up.railway.app`:
 
-- Im Railway-Dashboard: deinen Service öffnen → **Variables**
-- Variable anlegen:
-  - **Name:** `API_BASE`
-  - **Wert:** die öffentliche URL deines Services (z.B. `https://pars-hausanschluesse-production-xxxx.up.railway.app`)
+| Name | Wert | Zweck |
+|------|------|--------|
+| `API_BASE` | `https://deine-app.up.railway.app` | Upload-Links und Server-Basis-URL |
+| `VITE_API_URL` | `https://deine-app.up.railway.app` | Wird beim **Build** eingebettet, damit das Frontend die API unter derselben Domain aufruft |
 
-Die URL findest du unter **Settings** → **Networking** → **Generate Domain** (oder bei **Public Networking**).
-
-Nach dem ersten Deploy steht dort etwas wie:
-`https://<name>.up.railway.app`  
-Genau diese URL (ohne Slash am Ende) als `API_BASE` eintragen.
+Die URL findest du unter **Settings** → **Networking** → **Generate Domain** (oder **Public Networking**). Ohne `VITE_API_URL` weiß die gebaute App nicht, wo die API liegt, und die Auftragsliste bleibt leer.
 
 ## 5. Frontend mit der Railway-URL bauen
 

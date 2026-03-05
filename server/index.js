@@ -73,6 +73,15 @@ app.post('/api/upload', upload.single('file'), (req, res) => {
   res.json({ url, name: req.file.originalname, size: req.file.size })
 })
 
+// Frontend (Vite-Build) ausliefern, damit Railway die App unter / anzeigt
+const DIST = path.join(__dirname, '..', 'dist')
+if (fs.existsSync(DIST)) {
+  app.use(express.static(DIST))
+  app.get('*', (_req, res) => {
+    res.sendFile(path.join(DIST, 'index.html'))
+  })
+}
+
 app.listen(PORT, () => {
   console.log(`Upload-Server: ${API_BASE} (Port ${PORT})`)
 })
