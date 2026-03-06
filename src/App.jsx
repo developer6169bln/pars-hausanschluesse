@@ -856,15 +856,6 @@ function AuftragListe() {
               />
             </label>
             <label>
-              NVT Standort
-              <input
-                type="text"
-                value={form.nvtStandort}
-                onChange={(e) => setForm((f) => ({ ...f, nvtStandort: e.target.value }))}
-                placeholder="NVT Standort"
-              />
-            </label>
-            <label>
               Termin (Datum & Uhrzeit)
               <input
                 type="datetime-local"
