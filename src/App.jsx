@@ -544,7 +544,7 @@ function AuftragListe() {
       <main className="content">
         <section className="card">
           <h2>Neuer Auftrag</h2>
-          <div className="row">
+          <div className="form-stack">
             <label>
               Straße *
               <input
@@ -552,6 +552,7 @@ function AuftragListe() {
                 value={form.strasse}
                 onChange={(e) => setForm((f) => ({ ...f, strasse: e.target.value }))}
                 placeholder="z. B. Musterstraße"
+                autoComplete="address-line1"
               />
             </label>
             <label>
@@ -560,34 +561,9 @@ function AuftragListe() {
                 type="text"
                 value={form.hausnummer}
                 onChange={(e) => setForm((f) => ({ ...f, hausnummer: e.target.value }))}
-                placeholder="z. B. 12a"
-              />
-            </label>
-          </div>
-          <div className="row">
-            <label>
-              Kontakt Name
-              <input
-                type="text"
-                value={form.kontaktName}
-                onChange={(e) => setForm((f) => ({ ...f, kontaktName: e.target.value }))}
-              />
-            </label>
-            <label>
-              Telefon
-              <input
-                type="text"
-                value={form.telefon}
-                onChange={(e) => setForm((f) => ({ ...f, telefon: e.target.value }))}
-                placeholder="+49 …"
-              />
-            </label>
-            <label>
-              Ort
-              <input
-                type="text"
-                value={form.ort}
-                onChange={(e) => setForm((f) => ({ ...f, ort: e.target.value }))}
+                placeholder="z. B. 12 oder 12a"
+                inputMode="numeric"
+                autoComplete="address-line2"
               />
             </label>
             <label>
@@ -597,16 +573,48 @@ function AuftragListe() {
                 value={form.plz}
                 onChange={(e) => setForm((f) => ({ ...f, plz: e.target.value }))}
                 placeholder="Postleitzahl"
+                inputMode="numeric"
+                autoComplete="postal-code"
               />
             </label>
-          </div>
-          <div className="row">
+            <label>
+              Ort
+              <input
+                type="text"
+                value={form.ort}
+                onChange={(e) => setForm((f) => ({ ...f, ort: e.target.value }))}
+                placeholder="Ort"
+                autoComplete="address-level2"
+              />
+            </label>
+            <label>
+              Kontakt Name
+              <input
+                type="text"
+                value={form.kontaktName}
+                onChange={(e) => setForm((f) => ({ ...f, kontaktName: e.target.value }))}
+                placeholder="Name des Ansprechpartners"
+                autoComplete="name"
+              />
+            </label>
+            <label>
+              Telefon
+              <input
+                type="tel"
+                value={form.telefon}
+                onChange={(e) => setForm((f) => ({ ...f, telefon: e.target.value }))}
+                placeholder="+49 …"
+                inputMode="tel"
+                autoComplete="tel"
+              />
+            </label>
             <label>
               NVT
               <input
                 type="text"
                 value={form.nvt}
                 onChange={(e) => setForm((f) => ({ ...f, nvt: e.target.value }))}
+                placeholder="NVT"
               />
             </label>
             <label>
@@ -615,6 +623,7 @@ function AuftragListe() {
                 type="text"
                 value={form.nvtStandort}
                 onChange={(e) => setForm((f) => ({ ...f, nvtStandort: e.target.value }))}
+                placeholder="NVT Standort"
               />
             </label>
             <label>
@@ -623,10 +632,9 @@ function AuftragListe() {
                 type="text"
                 value={form.netzbetreiber}
                 onChange={(e) => setForm((f) => ({ ...f, netzbetreiber: e.target.value }))}
+                placeholder="Netzbetreiber"
               />
             </label>
-          </div>
-          <div className="row">
             <label>
               Standort (GPS)
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
@@ -654,8 +662,6 @@ function AuftragListe() {
                 Beim ersten Klick wird die Standortberechtigung angefragt (iPhone: „Standort zulassen“ tippen).
               </p>
             </label>
-          </div>
-          <div className="row">
             <label>
               Auftragsdateien hochladen (PDF)
               <input
@@ -680,8 +686,6 @@ function AuftragListe() {
                 }}
               />
             </label>
-          </div>
-          <div className="row">
             <label>
               Übersichtsplan Download-Link
               <input
@@ -691,8 +695,6 @@ function AuftragListe() {
                 placeholder="https://…"
               />
             </label>
-          </div>
-          <div className="row">
             <label>
               GEO ACE Messung
               <select
@@ -713,16 +715,14 @@ function AuftragListe() {
                 <option value="ja">Ja</option>
               </select>
             </label>
-            <label style={{ alignSelf: 'end' }}>
+            <label className="label-inline">
               <input
                 type="checkbox"
                 checked={!!form.abgeschlossen}
                 onChange={(e) => setForm((f) => ({ ...f, abgeschlossen: e.target.checked }))}
-              />{' '}
+              />
               Auftrag abgeschlossen
             </label>
-          </div>
-          <div className="row">
             <label>
               Messung Graben
               <input
@@ -739,15 +739,16 @@ function AuftragListe() {
                 onChange={(e) => setForm((f) => ({ ...f, messungSonstiges: e.target.value }))}
               />
             </label>
+            <label>
+              Notizen
+              <textarea
+                rows={3}
+                value={form.notizen}
+                onChange={(e) => setForm((f) => ({ ...f, notizen: e.target.value }))}
+                placeholder="Optionale Notizen"
+              />
+            </label>
           </div>
-          <label>
-            Notizen
-            <textarea
-              rows={2}
-              value={form.notizen}
-              onChange={(e) => setForm((f) => ({ ...f, notizen: e.target.value }))}
-            />
-          </label>
           <button className="btn primary" type="button" onClick={addAuftrag}>
             Auftrag anlegen
           </button>
@@ -921,13 +922,14 @@ function AuftragDetail() {
           <main className="content">
         <section className="card">
           <h2>1. Auftragseingang / Stammdaten</h2>
-          <div className="row">
+          <div className="form-stack">
             <label>
               Bezeichnung / Projekt *
               <input
                 type="text"
                 value={auftrag.bezeichnung}
                 onChange={(e) => setAuftrag((p) => ({ ...p, bezeichnung: e.target.value }))}
+                placeholder="Projektbezeichnung"
               />
             </label>
             <label>
@@ -936,16 +938,16 @@ function AuftragDetail() {
                 type="text"
                 value={auftrag.kunde}
                 onChange={(e) => setAuftrag((p) => ({ ...p, kunde: e.target.value }))}
+                placeholder="Kunde / Auftraggeber"
               />
             </label>
-          </div>
-          <div className="row">
             <label>
               Adresse (Hausanschluss) *
               <input
                 type="text"
                 value={auftrag.adresse}
                 onChange={(e) => setAuftrag((p) => ({ ...p, adresse: e.target.value }))}
+                placeholder="Straße und Hausnummer"
               />
             </label>
             <label>
@@ -955,6 +957,7 @@ function AuftragDetail() {
                 value={auftrag.plz ?? ''}
                 onChange={(e) => setAuftrag((p) => ({ ...p, plz: e.target.value }))}
                 placeholder="Postleitzahl"
+                inputMode="numeric"
               />
             </label>
             <label>
@@ -963,6 +966,7 @@ function AuftragDetail() {
                 type="text"
                 value={auftrag.ort}
                 onChange={(e) => setAuftrag((p) => ({ ...p, ort: e.target.value }))}
+                placeholder="Ort"
               />
             </label>
             <label>
@@ -971,6 +975,7 @@ function AuftragDetail() {
                 type="text"
                 value={auftrag.netzbetreiber}
                 onChange={(e) => setAuftrag((p) => ({ ...p, netzbetreiber: e.target.value }))}
+                placeholder="Netzbetreiber"
               />
             </label>
           </div>
@@ -978,32 +983,35 @@ function AuftragDetail() {
 
         <section className="card">
           <h2>2. Rohrbelegung & Übersichtsplan</h2>
-          <label>
-            Rohrbelegung (z. B. Rohr 1 = GF, Rohr 2 = Reserve)
-            <textarea
-              rows={3}
-              value={auftrag.rohrbelegung}
-              onChange={(e) => setAuftrag((p) => ({ ...p, rohrbelegung: e.target.value }))}
-            />
-          </label>
-          <label>
-            Übersichtsplan‑Referenz
-            <input
-              type="text"
-              value={auftrag.uebersichtsplanReferenz ?? ''}
-              onChange={(e) => setAuftrag((p) => ({ ...p, uebersichtsplanReferenz: e.target.value }))}
-              placeholder="Plannummer, Datei‑Link oder DMS‑Referenz"
-            />
-          </label>
-          <label>
-            Übersichtsplan Download-Link
-            <input
-              type="url"
-              value={auftrag.uebersichtsplanDownloadUrl ?? ''}
-              onChange={(e) => setAuftrag((p) => ({ ...p, uebersichtsplanDownloadUrl: e.target.value }))}
-              placeholder="https://…"
-            />
-          </label>
+          <div className="form-stack">
+            <label>
+              Rohrbelegung (z. B. Rohr 1 = GF, Rohr 2 = Reserve)
+              <textarea
+                rows={3}
+                value={auftrag.rohrbelegung}
+                onChange={(e) => setAuftrag((p) => ({ ...p, rohrbelegung: e.target.value }))}
+                placeholder="Rohrbelegung beschreiben"
+              />
+            </label>
+            <label>
+              Übersichtsplan‑Referenz
+              <input
+                type="text"
+                value={auftrag.uebersichtsplanReferenz ?? ''}
+                onChange={(e) => setAuftrag((p) => ({ ...p, uebersichtsplanReferenz: e.target.value }))}
+                placeholder="Plannummer, Datei‑Link oder DMS‑Referenz"
+              />
+            </label>
+            <label>
+              Übersichtsplan Download-Link
+              <input
+                type="url"
+                value={auftrag.uebersichtsplanDownloadUrl ?? ''}
+                onChange={(e) => setAuftrag((p) => ({ ...p, uebersichtsplanDownloadUrl: e.target.value }))}
+                placeholder="https://…"
+              />
+            </label>
+          </div>
           {(auftrag.uebersichtsplanDownloadUrl || '').trim() && (
             <p style={{ marginTop: '0.5rem' }}>
               <a
@@ -1021,7 +1029,7 @@ function AuftragDetail() {
 
         <section className="card">
           <h2>3. Ausführung / Dokumentation</h2>
-          <div className="row">
+          <div className="form-stack">
             <label>
               Ausführung Beginn (Datum)
               <input
@@ -1060,19 +1068,21 @@ function AuftragDetail() {
                 type="text"
                 value={auftrag.kolonne ?? ''}
                 onChange={(e) => setAuftrag((p) => ({ ...p, kolonne: e.target.value }))}
+                placeholder="Kolonne / Trupp"
               />
             </label>
-          </div>
-          <label>
-            Dokumentation der Ausführung
-            <textarea
-              rows={3}
-              value={auftrag.ausfuehrungDokumentation}
-              onChange={(e) => setAuftrag((p) => ({ ...p, ausfuehrungDokumentation: e.target.value }))}
-            />
-          </label>
-          <div className="row" style={{ marginTop: '0.75rem' }}>
-            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            <label>
+              Dokumentation der Ausführung
+              <textarea
+                rows={3}
+                value={auftrag.ausfuehrungDokumentation}
+                onChange={(e) => setAuftrag((p) => ({ ...p, ausfuehrungDokumentation: e.target.value }))}
+                placeholder="Dokumentation der Ausführung"
+              />
+            </label>
+            <label>
+              Fotos
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
               <button
                 type="button"
                 className="btn ghost"
@@ -1100,19 +1110,21 @@ function AuftragDetail() {
               <span className="muted" style={{ fontSize: '0.9rem' }}>
                 Fotos gespeichert: {(auftrag.dokumentationFotos || []).length}
               </span>
-            </div>
+              </div>
+            </label>
           </div>
         </section>
 
         <section className="card">
           <h2>4. Aufmaß / Geoace (nur Referenz)</h2>
-          <div className="row">
+          <div className="form-stack">
             <label>
               Geoace‑Vorgangsnummer
               <input
                 type="text"
                 value={auftrag.geoaceVorgang}
                 onChange={(e) => setAuftrag((p) => ({ ...p, geoaceVorgang: e.target.value }))}
+                placeholder="Geoace‑Vorgangsnummer"
               />
             </label>
             <label>
@@ -1123,6 +1135,8 @@ function AuftragDetail() {
                 step="0.1"
                 value={auftrag.aufmassLaenge}
                 onChange={(e) => setAuftrag((p) => ({ ...p, aufmassLaenge: e.target.value }))}
+                inputMode="decimal"
+                placeholder="0"
               />
             </label>
             <label>
@@ -1133,22 +1147,25 @@ function AuftragDetail() {
                 step="1"
                 value={auftrag.anzahlHausanschluesse}
                 onChange={(e) => setAuftrag((p) => ({ ...p, anzahlHausanschluesse: e.target.value }))}
+                inputMode="numeric"
+                placeholder="0"
+              />
+            </label>
+            <label>
+              Bemerkungen zum Aufmaß
+              <textarea
+                rows={2}
+                value={auftrag.aufmassBemerkung}
+                onChange={(e) => setAuftrag((p) => ({ ...p, aufmassBemerkung: e.target.value }))}
+                placeholder="Bemerkungen zum Aufmaß"
               />
             </label>
           </div>
-          <label>
-            Bemerkungen zum Aufmaß
-            <textarea
-              rows={2}
-              value={auftrag.aufmassBemerkung}
-              onChange={(e) => setAuftrag((p) => ({ ...p, aufmassBemerkung: e.target.value }))}
-            />
-          </label>
         </section>
 
         <section className="card">
           <h2>5. Messung & Abschluss</h2>
-          <div className="row">
+          <div className="form-stack">
             <label>
               GEO ACE Messung
               <select
@@ -1169,14 +1186,13 @@ function AuftragDetail() {
                 <option value="ja">Ja</option>
               </select>
             </label>
-          </div>
-          <div className="row">
             <label>
               Messung Graben
               <input
                 type="text"
                 value={auftrag.messungGraben}
                 onChange={(e) => setAuftrag((p) => ({ ...p, messungGraben: e.target.value }))}
+                placeholder="Messung Graben"
               />
             </label>
             <label>
@@ -1185,25 +1201,27 @@ function AuftragDetail() {
                 type="text"
                 value={auftrag.messungSonstiges}
                 onChange={(e) => setAuftrag((p) => ({ ...p, messungSonstiges: e.target.value }))}
+                placeholder="Messung sonstiges"
               />
             </label>
+            <label>
+              Notizen
+              <textarea
+                rows={3}
+                value={auftrag.notizen}
+                onChange={(e) => setAuftrag((p) => ({ ...p, notizen: e.target.value }))}
+                placeholder="Notizen"
+              />
+            </label>
+            <label className="label-inline">
+              <input
+                type="checkbox"
+                checked={!!auftrag.abgeschlossen}
+                onChange={(e) => setAuftrag((p) => ({ ...p, abgeschlossen: e.target.checked }))}
+              />
+              Auftrag abgeschlossen
+            </label>
           </div>
-          <label>
-            Notizen
-            <textarea
-              rows={2}
-              value={auftrag.notizen}
-              onChange={(e) => setAuftrag((p) => ({ ...p, notizen: e.target.value }))}
-            />
-          </label>
-          <label style={{ marginTop: '0.75rem' }}>
-            <input
-              type="checkbox"
-              checked={!!auftrag.abgeschlossen}
-              onChange={(e) => setAuftrag((p) => ({ ...p, abgeschlossen: e.target.checked }))}
-            />{' '}
-            Auftrag abgeschlossen
-          </label>
         </section>
 
         {saveStatus === 'gespeichert' && (
