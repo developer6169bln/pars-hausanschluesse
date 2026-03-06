@@ -431,6 +431,57 @@ function AuftragListe() {
       return String(a?.bezeichnung || '').localeCompare(String(b?.bezeichnung || ''), 'de')
     })
 
+  const getBerichtData = (von, bis) => {
+    const vonS = (von || '').trim()
+    const bisS = (bis || '').trim()
+    const list = (auftraege || []).filter((a) => {
+      const ts = terminToTs(a?.termin)
+      if (!Number.isFinite(ts) || ts === Number.POSITIVE_INFINITY) return false
+      const d = new Date(ts).toISOString().slice(0, 10)
+      if (vonS && d < vonS) return false
+      if (bisS && d > bisS) return false
+      return true
+    })
+    return { sortedBericht: sortByTermin(list), berichtSumme: list.reduce((s, a) => s + parseLaenge(a), 0) }
+  }
+
+  const openBerichtPdf = (von, bis, sortedBericht, berichtSumme) => {
+    const vonLabel = von ? new Date(von + 'T12:00:00').toLocaleDateString('de-DE') : '—'
+    const bisLabel = bis ? new Date(bis + 'T12:00:00').toLocaleDateString('de-DE') : '—'
+    const rows = sortedBericht
+      .map(
+        (a) =>
+          `<tr><td>${(formatTermin(a.termin) || '—').replace(/</g, '&lt;')}</td><td>${(a.bezeichnung || '—').replace(/</g, '&lt;')}</td><td>${([a.adresse, a.plz, a.ort].filter(Boolean).join(', ') || '—').replace(/</g, '&lt;')}</td><td>${parseLaenge(a).toFixed(1)}</td></tr>`
+      )
+      .join('')
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Bericht nach Datum</title><style>body{font-family:system-ui,sans-serif;padding:1.5rem;color:#1e293b;}h1{font-size:1.25rem;margin:0 0 0.5rem;}p{margin:0 0 1rem;color:#64748b;}table{width:100%;border-collapse:collapse;}th,td{padding:0.5rem 0.75rem;text-align:left;border-bottom:1px solid #e2e8f0;}th{background:#f1f5f9;font-weight:600;}tfoot td{border-top:2px solid #cbd5e1;padding-top:0.75rem;font-weight:600;}</style></head><body><h1>Bericht nach Datum</h1><p>Zeitraum: ${vonLabel} – ${bisLabel} · ${sortedBericht.length} Auftrag/Aufträge</p><table><thead><tr><th>Termin</th><th>Bezeichnung</th><th>Adresse</th><th>Messung Graben (m)</th></tr></thead><tbody>${rows}</tbody><tfoot><tr><td colspan="3"><strong>Summe Zeitraum</strong></td><td><strong>${berichtSumme.toFixed(1)} m</strong></td></tr></tfoot></table></body></html>`
+    const w = window.open('', '_blank')
+    if (w) {
+      w.document.write(html)
+      w.document.close()
+      w.focus()
+      setTimeout(() => w.print(), 500)
+    }
+  }
+
+  const openBerichtWhatsApp = (von, bis, sortedBericht, berichtSumme) => {
+    const vonLabel = von ? new Date(von + 'T12:00:00').toLocaleDateString('de-DE') : '—'
+    const bisLabel = bis ? new Date(bis + 'T12:00:00').toLocaleDateString('de-DE') : '—'
+    const lines = [
+      `Bericht nach Datum – Zeitraum ${vonLabel} bis ${bisLabel}`,
+      `${sortedBericht.length} Auftrag/Aufträge · Summe Messung Graben: ${berichtSumme.toFixed(1)} m`,
+      '',
+      ...sortedBericht.map((a) => {
+        const adr = [a.adresse, a.plz, a.ort].filter(Boolean).join(', ') || '—'
+        return `• ${formatTermin(a.termin) || '—'} | ${a.bezeichnung || '—'} | ${adr} | ${parseLaenge(a).toFixed(1)} m`
+      }),
+      '',
+      `Summe: ${berichtSumme.toFixed(1)} m`,
+    ]
+    const text = lines.join('\n')
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer')
+  }
+
   const groupByTerminDate = (list) => {
     const groups = new Map()
     for (const a of list || []) {
@@ -1184,16 +1235,7 @@ function AuftragListe() {
           {(() => {
             const von = (berichtVon || '').trim()
             const bis = (berichtBis || '').trim()
-            const berichtAuftraege = (auftraege || []).filter((a) => {
-              const ts = terminToTs(a?.termin)
-              if (!Number.isFinite(ts) || ts === Number.POSITIVE_INFINITY) return false
-              const d = new Date(ts).toISOString().slice(0, 10)
-              if (von && d < von) return false
-              if (bis && d > bis) return false
-              return true
-            })
-            const berichtSumme = berichtAuftraege.reduce((s, a) => s + parseLaenge(a), 0)
-            const sortedBericht = sortByTermin(berichtAuftraege)
+            const { sortedBericht, berichtSumme } = getBerichtData(von, bis)
             return (
               <>
                 {von || bis ? (
@@ -1205,32 +1247,50 @@ function AuftragListe() {
                     {sortedBericht.length === 0 ? (
                       <p className="muted">Keine Aufträge mit Termin in diesem Zeitraum.</p>
                     ) : (
-                      <table className="bericht-table">
-                        <thead>
-                          <tr>
-                            <th>Termin</th>
-                            <th>Bezeichnung</th>
-                            <th>Adresse</th>
-                            <th>Messung Graben (m)</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {sortedBericht.map((a) => (
-                            <tr key={a.id}>
-                              <td>{formatTermin(a.termin) || '—'}</td>
-                              <td>{a.bezeichnung || '—'}</td>
-                              <td>{[a.adresse, a.plz, a.ort].filter(Boolean).join(', ') || '—'}</td>
-                              <td>{parseLaenge(a).toFixed(1)}</td>
+                      <>
+                        <table className="bericht-table">
+                          <thead>
+                            <tr>
+                              <th>Termin</th>
+                              <th>Bezeichnung</th>
+                              <th>Adresse</th>
+                              <th>Messung Graben (m)</th>
                             </tr>
-                          ))}
-                        </tbody>
-                        <tfoot>
-                          <tr>
-                            <td colSpan={3}><strong>Tagessumme / Summe Zeitraum</strong></td>
-                            <td><strong>{berichtSumme.toFixed(1)} m</strong></td>
-                          </tr>
-                        </tfoot>
-                      </table>
+                          </thead>
+                          <tbody>
+                            {sortedBericht.map((a) => (
+                              <tr key={a.id}>
+                                <td>{formatTermin(a.termin) || '—'}</td>
+                                <td>{a.bezeichnung || '—'}</td>
+                                <td>{[a.adresse, a.plz, a.ort].filter(Boolean).join(', ') || '—'}</td>
+                                <td>{parseLaenge(a).toFixed(1)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          <tfoot>
+                            <tr>
+                              <td colSpan={3}><strong>Tagessumme / Summe Zeitraum</strong></td>
+                              <td><strong>{berichtSumme.toFixed(1)} m</strong></td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                        <div className="bericht-actions" style={{ marginTop: '1rem', display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                          <button
+                            type="button"
+                            className="btn primary"
+                            onClick={() => openBerichtPdf(von, bis, sortedBericht, berichtSumme)}
+                          >
+                            Als PDF speichern
+                          </button>
+                          <button
+                            type="button"
+                            className="btn ghost"
+                            onClick={() => { openBerichtPdf(von, bis, sortedBericht, berichtSumme); openBerichtWhatsApp(von, bis, sortedBericht, berichtSumme); }}
+                          >
+                            PDF erstellen & per WhatsApp teilen
+                          </button>
+                        </div>
+                      </>
                     )}
                   </>
                 ) : (
