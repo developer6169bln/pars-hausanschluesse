@@ -380,6 +380,35 @@ textarea {
   color: #475569;
   font-size: 0.9em;
 }
+.bericht-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+.bericht-table th,
+.bericht-table td {
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid #e2e8f0;
+}
+.bericht-table th {
+  font-weight: 600;
+  color: #334155;
+  background: #f8fafc;
+}
+.bericht-table tfoot td {
+  border-top: 2px solid #cbd5e1;
+  padding-top: 0.75rem;
+  font-weight: 600;
+}
+.bericht-table tfoot td:last-child {
+  text-align: right;
+}
+@media (max-width: 640px) {
+  .bericht-table { font-size: 0.8rem; }
+  .bericht-table th,
+  .bericht-table td { padding: 0.4rem 0.5rem; }
+}
 .muted {
   font-size: 0.85rem;
   color: #9ca3af;

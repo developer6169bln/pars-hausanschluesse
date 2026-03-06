@@ -325,6 +325,8 @@ function AuftragListe() {
     uebersichtsplanDownloadUrl: '',
   })
   const [importVorschau, setImportVorschau] = useState([])
+  const [berichtVon, setBerichtVon] = useState('')
+  const [berichtBis, setBerichtBis] = useState('')
   const [standortStatus, setStandortStatus] = useState('') // '' | 'loading' | 'ok' | 'error'
   const [ortsanwesenheitStatus, setOrtsanwesenheitStatus] = useState('') // '' | 'loading' | 'ok' | 'error'
 
@@ -378,10 +380,11 @@ function AuftragListe() {
     }
   }
 
+  /** Länge in m – primär aus „Messung Graben“, sonst Aufmaß/Kabellänge. */
   const parseLaenge = (auftrag) => {
-    const roh = auftrag.aufmassLaenge ?? auftrag.kabellaenge ?? ''
+    const roh = (auftrag.messungGraben ?? auftrag.aufmassLaenge ?? auftrag.kabellaenge ?? '').toString().trim()
     if (!roh) return 0
-    const num = parseFloat(String(roh).replace(',', '.'))
+    const num = parseFloat(roh.replace(',', '.'))
     return Number.isFinite(num) ? num : 0
   }
 
@@ -524,6 +527,9 @@ function AuftragListe() {
             {terminText ? <span> · Termin: {terminText}</span> : null}
           </div>
           <div className="item-meta">
+            {(a.messungGraben != null && String(a.messungGraben).trim() !== '') ? (
+              <span className="meta-chip">Messung Graben: {parseLaenge(a).toFixed(1)} m</span>
+            ) : null}
             {verbund ? (
               <span className="meta-chip">
                 Verbund: {verbund}{' '}
@@ -1150,6 +1156,89 @@ function AuftragListe() {
               )}
             </>
           )}
+        </section>
+
+        <section className="card">
+          <h2>Bericht erstellung nach Datum</h2>
+          <p className="muted" style={{ marginTop: '-0.25rem', marginBottom: '0.75rem' }}>
+            Aufträge nach Termin-Datum filtern und Summe „Messung Graben“ für den Zeitraum anzeigen.
+          </p>
+          <div className="form-stack" style={{ maxWidth: '20rem', marginBottom: '1rem' }}>
+            <label>
+              Von (Datum)
+              <input
+                type="date"
+                value={berichtVon}
+                onChange={(e) => setBerichtVon(e.target.value)}
+              />
+            </label>
+            <label>
+              Bis (Datum)
+              <input
+                type="date"
+                value={berichtBis}
+                onChange={(e) => setBerichtBis(e.target.value)}
+              />
+            </label>
+          </div>
+          {(() => {
+            const von = (berichtVon || '').trim()
+            const bis = (berichtBis || '').trim()
+            const berichtAuftraege = (auftraege || []).filter((a) => {
+              const ts = terminToTs(a?.termin)
+              if (!Number.isFinite(ts) || ts === Number.POSITIVE_INFINITY) return false
+              const d = new Date(ts).toISOString().slice(0, 10)
+              if (von && d < von) return false
+              if (bis && d > bis) return false
+              return true
+            })
+            const berichtSumme = berichtAuftraege.reduce((s, a) => s + parseLaenge(a), 0)
+            const sortedBericht = sortByTermin(berichtAuftraege)
+            return (
+              <>
+                {von || bis ? (
+                  <>
+                    <p className="muted">
+                      {sortedBericht.length} Auftrag/Aufträge im Zeitraum
+                      {von || bis ? ` · Summe Messung Graben: ${berichtSumme.toFixed(1)} m` : ''}
+                    </p>
+                    {sortedBericht.length === 0 ? (
+                      <p className="muted">Keine Aufträge mit Termin in diesem Zeitraum.</p>
+                    ) : (
+                      <table className="bericht-table">
+                        <thead>
+                          <tr>
+                            <th>Termin</th>
+                            <th>Bezeichnung</th>
+                            <th>Adresse</th>
+                            <th>Messung Graben (m)</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {sortedBericht.map((a) => (
+                            <tr key={a.id}>
+                              <td>{formatTermin(a.termin) || '—'}</td>
+                              <td>{a.bezeichnung || '—'}</td>
+                              <td>{[a.adresse, a.plz, a.ort].filter(Boolean).join(', ') || '—'}</td>
+                              <td>{parseLaenge(a).toFixed(1)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot>
+                          <tr>
+                            <td colSpan={3}><strong>Tagessumme / Summe Zeitraum</strong></td>
+                            <td><strong>{berichtSumme.toFixed(1)} m</strong></td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    )}
+                  </>
+                ) : (
+                  <p className="muted">Von- und Bis-Datum wählen, um die Auflistung und Summe zu sehen.</p>
+                )}
+              </>
+            )
+          })()}
         </section>
       </main>
 
