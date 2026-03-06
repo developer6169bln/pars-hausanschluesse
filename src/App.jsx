@@ -356,6 +356,45 @@ function AuftragListe() {
       return String(a?.bezeichnung || '').localeCompare(String(b?.bezeichnung || ''), 'de')
     })
 
+  const groupByTerminDate = (list) => {
+    const groups = new Map()
+    for (const a of list || []) {
+      const ts = terminToTs(a?.termin)
+      const key = Number.isFinite(ts) && ts !== Number.POSITIVE_INFINITY ? new Date(ts).toISOString().slice(0, 10) : 'none'
+      if (!groups.has(key)) groups.set(key, [])
+      groups.get(key).push(a)
+    }
+    const keys = Array.from(groups.keys()).sort((ka, kb) => {
+      if (ka === 'none') return 1
+      if (kb === 'none') return -1
+      return ka.localeCompare(kb)
+    })
+    return keys.map((key) => {
+      const items = sortByTermin(groups.get(key) || [])
+      const label =
+        key === 'none'
+          ? 'Ohne Termin'
+          : new Date(`${key}T00:00:00`).toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })
+      return { key, label, items }
+    })
+  }
+
+  const renderGroupedList = (list) => {
+    const groups = groupByTerminDate(list)
+    return (
+      <div className="termin-groups">
+        {groups.map((g) => (
+          <div key={g.key} className="termin-group">
+            <div className="termin-group-title">{g.label}</div>
+            <ul className="list">
+              {g.items.map(renderAuftragListenItem)}
+            </ul>
+          </div>
+        ))}
+      </div>
+    )
+  }
+
   const offeneAuftraege = sortByTermin(auftraege.filter((a) => !a.abgeschlossen))
   const abgeschlosseneAuftraege = sortByTermin(auftraege.filter((a) => a.abgeschlossen))
   const summeOffen = offeneAuftraege.reduce((sum, a) => sum + parseLaenge(a), 0)
@@ -390,27 +429,46 @@ function AuftragListe() {
     const firstThumb = hasFotos ? getAttachmentSrc(fotos[0]) : null
     const terminText = (a.termin || '').trim() ? formatTermin(a.termin) : ''
     const navUrl = buildMapsNavUrl({ adresse: a.adresse, plz: a.plz, ort: a.ort, standort: a.standort })
+    const planUrl = (a.uebersichtsplanDownloadUrl || '').trim()
+    const verbund = (a.verbundFarbe || '').trim()
+    const pipes1 = (a.pipesFarbe1 || '').trim()
+    const pipes2 = (a.pipesFarbe2 || '').trim()
+    const addrLabel = [a.adresse, a.plz, a.ort].filter(Boolean).join(', ')
     return (
       <li key={a.id} className="list-item">
         <div>
           <div className="item-title">{a.bezeichnung}</div>
           <div className="item-sub">
-            {a.adresse}
-            {a.ort ? `, ${a.ort}` : ''}
-            {a.netzbetreiber ? ` · ${a.netzbetreiber}` : ''}
-            {terminText ? ` · Termin: ${terminText}` : ''}
             {navUrl ? (
-              <>
-                {' '}
-                ·{' '}
-                <a className="nav-link" href={navUrl} target="_blank" rel="noopener noreferrer">
-                  Navigation
-                </a>
-              </>
-            ) : null}
-            {a.aufmassLaenge && (
-              <> · Länge: {String(a.aufmassLaenge).replace('.', ',')} m</>
+              <a className="nav-link" href={navUrl} target="_blank" rel="noopener noreferrer" title="In Google Maps navigieren">
+                {addrLabel || a.adresse || 'Adresse'}
+              </a>
+            ) : (
+              <span>{addrLabel || a.adresse}</span>
             )}
+            {terminText ? <span> · Termin: {terminText}</span> : null}
+          </div>
+          <div className="item-meta">
+            {verbund ? (
+              <span className="meta-chip">
+                Verbund: {verbund}{' '}
+                {verbund.includes('/') ? (
+                  <ColorPair left={verbund.split('/')[0]} right={verbund.split('/')[1]} />
+                ) : (
+                  <ColorSwatch name={verbund} />
+                )}
+              </span>
+            ) : null}
+            {(pipes1 || pipes2) ? (
+              <span className="meta-chip">
+                Pipes: {pipes1 || '—'} / {pipes2 || pipes1 || '—'} <ColorPair left={pipes1} right={pipes2 || pipes1} />
+              </span>
+            ) : null}
+            {planUrl ? (
+              <a className="nav-link" href={planUrl} target="_blank" rel="noopener noreferrer">
+                Übersichtsplan
+              </a>
+            ) : null}
           </div>
         </div>
         <div className="list-item-actions">
@@ -953,9 +1011,7 @@ function AuftragListe() {
               )}
               {offeneAuftraege.length > 0 && (
                 <>
-                  <ul className="list">
-                    {offeneAuftraege.map(renderAuftragListenItem)}
-                  </ul>
+                  {renderGroupedList(offeneAuftraege)}
                   <p className="muted">Länge offen: {summeOffen.toFixed(1)} m</p>
                 </>
               )}
@@ -966,9 +1022,7 @@ function AuftragListe() {
               )}
               {abgeschlosseneAuftraege.length > 0 && (
                 <>
-                  <ul className="list">
-                    {abgeschlosseneAuftraege.map(renderAuftragListenItem)}
-                  </ul>
+                  {renderGroupedList(abgeschlosseneAuftraege)}
                   <p className="muted">Länge abgeschlossen: {summeAbgeschlossen.toFixed(1)} m</p>
                 </>
               )}
