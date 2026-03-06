@@ -348,6 +348,18 @@ function AuftragListe() {
     }
   }
 
+  const isAbgeschlossen = (a) => {
+    if (!a) return false
+    if (typeof a.abgeschlossen === 'boolean') return a.abgeschlossen
+    if (typeof a.abgeschlossen === 'string') {
+      const v = a.abgeschlossen.toLowerCase()
+      if (v === 'true' || v === 'ja' || v === '1') return true
+      if (v === 'false' || v === 'nein' || v === '0') return false
+    }
+    if (typeof a.status === 'string' && a.status.toLowerCase().includes('abgeschlossen')) return true
+    return false
+  }
+
   const sortByTermin = (list) =>
     [...(list || [])].sort((a, b) => {
       const da = terminToTs(a?.termin)
@@ -398,8 +410,8 @@ function AuftragListe() {
     )
   }
 
-  const offeneAuftraege = sortByTermin(auftraege.filter((a) => !a.abgeschlossen))
-  const abgeschlosseneAuftraege = sortByTermin(auftraege.filter((a) => a.abgeschlossen))
+  const offeneAuftraege = sortByTermin(auftraege.filter((a) => !isAbgeschlossen(a)))
+  const abgeschlosseneAuftraege = sortByTermin(auftraege.filter((a) => isAbgeschlossen(a)))
   const summeOffen = offeneAuftraege.reduce((sum, a) => sum + parseLaenge(a), 0)
   const summeAbgeschlossen = abgeschlosseneAuftraege.reduce((sum, a) => sum + parseLaenge(a), 0)
   const summeGesamt = summeOffen + summeAbgeschlossen
@@ -1330,33 +1342,51 @@ function AuftragDetail() {
             <label>
               Fotos
               <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-              <button
-                type="button"
-                className="btn ghost"
-                onClick={() => kameraInputRef.current?.click()}
-              >
-                Kamera öffnen (Foto)
-              </button>
-              <input
-                ref={kameraInputRef}
-                type="file"
-                accept="image/*"
-                capture="environment"
-                multiple
-                style={{ display: 'none' }}
-                onChange={async (e) => {
-                  const atts = await filesToAttachments(e.target.files)
-                  if (!atts.length) return
-                  setAuftrag((p) => ({
-                    ...p,
-                    dokumentationFotos: [...(p.dokumentationFotos || []), ...atts],
-                  }))
-                  e.target.value = ''
-                }}
-              />
-              <span className="muted" style={{ fontSize: '0.9rem' }}>
-                Fotos gespeichert: {(auftrag.dokumentationFotos || []).length}
-              </span>
+                <button
+                  type="button"
+                  className="btn ghost"
+                  onClick={() => kameraInputRef.current?.click()}
+                >
+                  Kamera öffnen (Foto)
+                </button>
+                <input
+                  ref={kameraInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  multiple
+                  style={{ display: 'none' }}
+                  onChange={async (e) => {
+                    const atts = await filesToAttachments(e.target.files)
+                    if (!atts.length) return
+                    setAuftrag((p) => ({
+                      ...p,
+                      dokumentationFotos: [...(p.dokumentationFotos || []), ...atts],
+                    }))
+                    e.target.value = ''
+                  }}
+                />
+                <label className="btn ghost" style={{ margin: 0 }}>
+                  Fotos hochladen
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    style={{ display: 'none' }}
+                    onChange={async (e) => {
+                      const atts = await filesToAttachments(e.target.files)
+                      if (!atts.length) return
+                      setAuftrag((p) => ({
+                        ...p,
+                        dokumentationFotos: [...(p.dokumentationFotos || []), ...atts],
+                      }))
+                      e.target.value = ''
+                    }}
+                  />
+                </label>
+                <span className="muted" style={{ fontSize: '0.9rem' }}>
+                  Fotos gespeichert: {(auftrag.dokumentationFotos || []).length}
+                </span>
               </div>
             </label>
           </div>
