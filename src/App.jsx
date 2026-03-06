@@ -298,6 +298,85 @@ function useAuftraege() {
   return ctx
 }
 
+// Gemeinsam für Bericht-Seite und AuftragListe
+function parseLaenge(auftrag) {
+  const roh = (auftrag?.messungGraben ?? auftrag?.aufmassLaenge ?? auftrag?.kabellaenge ?? '').toString().trim()
+  if (!roh) return 0
+  const num = parseFloat(roh.replace(',', '.'))
+  return Number.isFinite(num) ? num : 0
+}
+function terminToTs(termin) {
+  const t = (termin || '').trim()
+  if (!t) return Number.POSITIVE_INFINITY
+  const m = t.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/)
+  if (!m) return Number.POSITIVE_INFINITY
+  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5]), 0, 0).getTime()
+}
+function formatTermin(termin) {
+  const ts = terminToTs(termin)
+  if (!Number.isFinite(ts) || ts === Number.POSITIVE_INFINITY) return ''
+  try {
+    return new Date(ts).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })
+  } catch {
+    return String(termin || '')
+  }
+}
+function sortByTermin(list) {
+  return [...(list || [])].sort((a, b) => {
+    const da = terminToTs(a?.termin)
+    const db = terminToTs(b?.termin)
+    if (da !== db) return da - db
+    return String(a?.bezeichnung || '').localeCompare(String(b?.bezeichnung || ''), 'de')
+  })
+}
+function getBerichtData(auftraege, von, bis) {
+  const vonS = (von || '').trim()
+  const bisS = (bis || '').trim()
+  const list = (auftraege || []).filter((a) => {
+    const ts = terminToTs(a?.termin)
+    if (!Number.isFinite(ts) || ts === Number.POSITIVE_INFINITY) return false
+    const d = new Date(ts).toISOString().slice(0, 10)
+    if (vonS && d < vonS) return false
+    if (bisS && d > bisS) return false
+    return true
+  })
+  return { sortedBericht: sortByTermin(list), berichtSumme: list.reduce((s, a) => s + parseLaenge(a), 0) }
+}
+function openBerichtPdf(von, bis, sortedBericht, berichtSumme) {
+  const vonLabel = von ? new Date(von + 'T12:00:00').toLocaleDateString('de-DE') : '—'
+  const bisLabel = bis ? new Date(bis + 'T12:00:00').toLocaleDateString('de-DE') : '—'
+  const rows = sortedBericht
+    .map(
+      (a) =>
+        `<tr><td>${(formatTermin(a.termin) || '—').replace(/</g, '&lt;')}</td><td>${(a.bezeichnung || '—').replace(/</g, '&lt;')}</td><td>${([a.adresse, a.plz, a.ort].filter(Boolean).join(', ') || '—').replace(/</g, '&lt;')}</td><td>${parseLaenge(a).toFixed(1)}</td></tr>`
+    )
+    .join('')
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Bericht nach Datum</title><style>body{font-family:system-ui,sans-serif;padding:1.5rem;color:#1e293b;}h1{font-size:1.25rem;margin:0 0 0.5rem;}p{margin:0 0 1rem;color:#64748b;}table{width:100%;border-collapse:collapse;}th,td{padding:0.5rem 0.75rem;text-align:left;border-bottom:1px solid #e2e8f0;}th{background:#f1f5f9;font-weight:600;}tfoot td{border-top:2px solid #cbd5e1;padding-top:0.75rem;font-weight:600;}</style></head><body><h1>Bericht nach Datum</h1><p>Zeitraum: ${vonLabel} – ${bisLabel} · ${sortedBericht.length} Auftrag/Aufträge</p><table><thead><tr><th>Termin</th><th>Bezeichnung</th><th>Adresse</th><th>Messung Graben (m)</th></tr></thead><tbody>${rows}</tbody><tfoot><tr><td colspan="3"><strong>Summe Zeitraum</strong></td><td><strong>${berichtSumme.toFixed(1)} m</strong></td></tr></tfoot></table></body></html>`
+  const w = window.open('', '_blank')
+  if (w) {
+    w.document.write(html)
+    w.document.close()
+    w.focus()
+    setTimeout(() => w.print(), 500)
+  }
+}
+function openBerichtWhatsApp(von, bis, sortedBericht, berichtSumme) {
+  const vonLabel = von ? new Date(von + 'T12:00:00').toLocaleDateString('de-DE') : '—'
+  const bisLabel = bis ? new Date(bis + 'T12:00:00').toLocaleDateString('de-DE') : '—'
+  const lines = [
+    `Bericht nach Datum – Zeitraum ${vonLabel} bis ${bisLabel}`,
+    `${sortedBericht.length} Auftrag/Aufträge · Summe Messung Graben: ${berichtSumme.toFixed(1)} m`,
+    '',
+    ...sortedBericht.map((a) => {
+      const adr = [a.adresse, a.plz, a.ort].filter(Boolean).join(', ') || '—'
+      return `• ${formatTermin(a.termin) || '—'} | ${a.bezeichnung || '—'} | ${adr} | ${parseLaenge(a).toFixed(1)} m`
+    }),
+    '',
+    `Summe: ${berichtSumme.toFixed(1)} m`,
+  ]
+  window.open(`https://wa.me/?text=${encodeURIComponent(lines.join('\n'))}`, '_blank', 'noopener,noreferrer')
+}
+
 function AuftragListe() {
   const [auftraege, setAuftraege, loaded, fetchError, reload] = useAuftraege()
   const [form, setForm] = useState({
@@ -325,8 +404,6 @@ function AuftragListe() {
     uebersichtsplanDownloadUrl: '',
   })
   const [importVorschau, setImportVorschau] = useState([])
-  const [berichtVon, setBerichtVon] = useState('')
-  const [berichtBis, setBerichtBis] = useState('')
   const [showNeuerAuftragForm, setShowNeuerAuftragForm] = useState(false)
   const [standortStatus, setStandortStatus] = useState('') // '' | 'loading' | 'ok' | 'error'
   const [ortsanwesenheitStatus, setOrtsanwesenheitStatus] = useState('') // '' | 'loading' | 'ok' | 'error'
@@ -381,37 +458,6 @@ function AuftragListe() {
     }
   }
 
-  /** Länge in m – primär aus „Messung Graben“, sonst Aufmaß/Kabellänge. */
-  const parseLaenge = (auftrag) => {
-    const roh = (auftrag.messungGraben ?? auftrag.aufmassLaenge ?? auftrag.kabellaenge ?? '').toString().trim()
-    if (!roh) return 0
-    const num = parseFloat(roh.replace(',', '.'))
-    return Number.isFinite(num) ? num : 0
-  }
-
-  const terminToTs = (termin) => {
-    const t = (termin || '').trim()
-    if (!t) return Number.POSITIVE_INFINITY
-    const m = t.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/)
-    if (!m) return Number.POSITIVE_INFINITY
-    const y = Number(m[1])
-    const mo = Number(m[2])
-    const d = Number(m[3])
-    const h = Number(m[4])
-    const mi = Number(m[5])
-    return new Date(y, mo - 1, d, h, mi, 0, 0).getTime()
-  }
-
-  const formatTermin = (termin) => {
-    const ts = terminToTs(termin)
-    if (!Number.isFinite(ts) || ts === Number.POSITIVE_INFINITY) return ''
-    try {
-      return new Date(ts).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })
-    } catch {
-      return String(termin || '')
-    }
-  }
-
   const isAbgeschlossen = (a) => {
     if (!a) return false
     if (typeof a.abgeschlossen === 'boolean') return a.abgeschlossen
@@ -422,65 +468,6 @@ function AuftragListe() {
     }
     if (typeof a.status === 'string' && a.status.toLowerCase().includes('abgeschlossen')) return true
     return false
-  }
-
-  const sortByTermin = (list) =>
-    [...(list || [])].sort((a, b) => {
-      const da = terminToTs(a?.termin)
-      const db = terminToTs(b?.termin)
-      if (da !== db) return da - db
-      return String(a?.bezeichnung || '').localeCompare(String(b?.bezeichnung || ''), 'de')
-    })
-
-  const getBerichtData = (von, bis) => {
-    const vonS = (von || '').trim()
-    const bisS = (bis || '').trim()
-    const list = (auftraege || []).filter((a) => {
-      const ts = terminToTs(a?.termin)
-      if (!Number.isFinite(ts) || ts === Number.POSITIVE_INFINITY) return false
-      const d = new Date(ts).toISOString().slice(0, 10)
-      if (vonS && d < vonS) return false
-      if (bisS && d > bisS) return false
-      return true
-    })
-    return { sortedBericht: sortByTermin(list), berichtSumme: list.reduce((s, a) => s + parseLaenge(a), 0) }
-  }
-
-  const openBerichtPdf = (von, bis, sortedBericht, berichtSumme) => {
-    const vonLabel = von ? new Date(von + 'T12:00:00').toLocaleDateString('de-DE') : '—'
-    const bisLabel = bis ? new Date(bis + 'T12:00:00').toLocaleDateString('de-DE') : '—'
-    const rows = sortedBericht
-      .map(
-        (a) =>
-          `<tr><td>${(formatTermin(a.termin) || '—').replace(/</g, '&lt;')}</td><td>${(a.bezeichnung || '—').replace(/</g, '&lt;')}</td><td>${([a.adresse, a.plz, a.ort].filter(Boolean).join(', ') || '—').replace(/</g, '&lt;')}</td><td>${parseLaenge(a).toFixed(1)}</td></tr>`
-      )
-      .join('')
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Bericht nach Datum</title><style>body{font-family:system-ui,sans-serif;padding:1.5rem;color:#1e293b;}h1{font-size:1.25rem;margin:0 0 0.5rem;}p{margin:0 0 1rem;color:#64748b;}table{width:100%;border-collapse:collapse;}th,td{padding:0.5rem 0.75rem;text-align:left;border-bottom:1px solid #e2e8f0;}th{background:#f1f5f9;font-weight:600;}tfoot td{border-top:2px solid #cbd5e1;padding-top:0.75rem;font-weight:600;}</style></head><body><h1>Bericht nach Datum</h1><p>Zeitraum: ${vonLabel} – ${bisLabel} · ${sortedBericht.length} Auftrag/Aufträge</p><table><thead><tr><th>Termin</th><th>Bezeichnung</th><th>Adresse</th><th>Messung Graben (m)</th></tr></thead><tbody>${rows}</tbody><tfoot><tr><td colspan="3"><strong>Summe Zeitraum</strong></td><td><strong>${berichtSumme.toFixed(1)} m</strong></td></tr></tfoot></table></body></html>`
-    const w = window.open('', '_blank')
-    if (w) {
-      w.document.write(html)
-      w.document.close()
-      w.focus()
-      setTimeout(() => w.print(), 500)
-    }
-  }
-
-  const openBerichtWhatsApp = (von, bis, sortedBericht, berichtSumme) => {
-    const vonLabel = von ? new Date(von + 'T12:00:00').toLocaleDateString('de-DE') : '—'
-    const bisLabel = bis ? new Date(bis + 'T12:00:00').toLocaleDateString('de-DE') : '—'
-    const lines = [
-      `Bericht nach Datum – Zeitraum ${vonLabel} bis ${bisLabel}`,
-      `${sortedBericht.length} Auftrag/Aufträge · Summe Messung Graben: ${berichtSumme.toFixed(1)} m`,
-      '',
-      ...sortedBericht.map((a) => {
-        const adr = [a.adresse, a.plz, a.ort].filter(Boolean).join(', ') || '—'
-        return `• ${formatTermin(a.termin) || '—'} | ${a.bezeichnung || '—'} | ${adr} | ${parseLaenge(a).toFixed(1)} m`
-      }),
-      '',
-      `Summe: ${berichtSumme.toFixed(1)} m`,
-    ]
-    const text = lines.join('\n')
-    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer')
   }
 
   const groupByTerminDate = (list) => {
@@ -855,6 +842,11 @@ function AuftragListe() {
         <p className="subtitle">
           Vom Gehweg bis ins Haus: Glasfaser‑Hausanschlüsse planen, dokumentieren und für das Aufmaß vorbereiten.
         </p>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', justifyContent: 'center', marginTop: '0.5rem' }}>
+          <Link to="/bericht" className="btn ghost">
+            Bericht nach Datum
+          </Link>
+        </div>
       </header>
 
       <main className="content">
@@ -1190,7 +1182,7 @@ function AuftragListe() {
         </section>
         )}
 
-        <section className="card">
+        <section className="card" id="auftragsliste">
           <h2>Auftragsliste</h2>
           {API_BASE && <p className="muted" style={{ marginTop: '-0.25rem', marginBottom: '0.5rem' }}>Gemeinsamer Auftragspool – für alle Nutzer sichtbar und bearbeitbar.</p>}
           {!loaded && API_BASE && <p className="muted">Laden…</p>}
@@ -1232,98 +1224,6 @@ function AuftragListe() {
               )}
             </>
           )}
-        </section>
-
-        <section className="card">
-          <h2>Bericht erstellung nach Datum</h2>
-          <p className="muted" style={{ marginTop: '-0.25rem', marginBottom: '0.75rem' }}>
-            Aufträge nach Termin-Datum filtern und Summe „Messung Graben“ für den Zeitraum anzeigen.
-          </p>
-          <div className="form-stack" style={{ maxWidth: '20rem', marginBottom: '1rem' }}>
-            <label>
-              Von (Datum)
-              <input
-                type="date"
-                value={berichtVon}
-                onChange={(e) => setBerichtVon(e.target.value)}
-              />
-            </label>
-            <label>
-              Bis (Datum)
-              <input
-                type="date"
-                value={berichtBis}
-                onChange={(e) => setBerichtBis(e.target.value)}
-              />
-            </label>
-          </div>
-          {(() => {
-            const von = (berichtVon || '').trim()
-            const bis = (berichtBis || '').trim()
-            const { sortedBericht, berichtSumme } = getBerichtData(von, bis)
-            return (
-              <>
-                {von || bis ? (
-                  <>
-                    <p className="muted">
-                      {sortedBericht.length} Auftrag/Aufträge im Zeitraum
-                      {von || bis ? ` · Summe Messung Graben: ${berichtSumme.toFixed(1)} m` : ''}
-                    </p>
-                    {sortedBericht.length === 0 ? (
-                      <p className="muted">Keine Aufträge mit Termin in diesem Zeitraum.</p>
-                    ) : (
-                      <>
-                        <table className="bericht-table">
-                          <thead>
-                            <tr>
-                              <th>Termin</th>
-                              <th>Bezeichnung</th>
-                              <th>Adresse</th>
-                              <th>Messung Graben (m)</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {sortedBericht.map((a) => (
-                              <tr key={a.id}>
-                                <td>{formatTermin(a.termin) || '—'}</td>
-                                <td>{a.bezeichnung || '—'}</td>
-                                <td>{[a.adresse, a.plz, a.ort].filter(Boolean).join(', ') || '—'}</td>
-                                <td>{parseLaenge(a).toFixed(1)}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                          <tfoot>
-                            <tr>
-                              <td colSpan={3}><strong>Tagessumme / Summe Zeitraum</strong></td>
-                              <td><strong>{berichtSumme.toFixed(1)} m</strong></td>
-                            </tr>
-                          </tfoot>
-                        </table>
-                        <div className="bericht-actions" style={{ marginTop: '1rem', display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                          <button
-                            type="button"
-                            className="btn primary"
-                            onClick={() => openBerichtPdf(von, bis, sortedBericht, berichtSumme)}
-                          >
-                            Als PDF speichern
-                          </button>
-                          <button
-                            type="button"
-                            className="btn ghost"
-                            onClick={() => { openBerichtPdf(von, bis, sortedBericht, berichtSumme); openBerichtWhatsApp(von, bis, sortedBericht, berichtSumme); }}
-                          >
-                            PDF erstellen & per WhatsApp teilen
-                          </button>
-                        </div>
-                      </>
-                    )}
-                  </>
-                ) : (
-                  <p className="muted">Von- und Bis-Datum wählen, um die Auflistung und Summe zu sehen.</p>
-                )}
-              </>
-            )
-          })()}
         </section>
       </main>
 
@@ -1953,6 +1853,87 @@ function Abschlussprotokoll() {
   )
 }
 
+function BerichtNachDatumPage() {
+  const [auftraege] = useAuftraege()
+  const [von, setVon] = useState('')
+  const [bis, setBis] = useState('')
+  const vonS = (von || '').trim()
+  const bisS = (bis || '').trim()
+  const { sortedBericht, berichtSumme } = getBerichtData(auftraege, vonS, bisS)
+
+  return (
+    <div className="page">
+      <header className="topbar">
+        <Link to="/" className="link-back">← Zurück zur Übersicht</Link>
+        <div className="logo">
+          <img src="https://parsbau.de/wp-content/uploads/2023/10/logo-pars22-e1696588277925.jpg" alt="PARS Bau Logo" />
+        </div>
+        <h1>Bericht nach Datum</h1>
+        <p className="subtitle">Aufträge nach Termin filtern und Summe „Messung Graben“ für den Zeitraum.</p>
+      </header>
+      <main className="content">
+        <section className="card">
+          <div className="form-stack" style={{ maxWidth: '20rem', marginBottom: '1rem' }}>
+            <label>Von (Datum)</label>
+            <input type="date" value={von} onChange={(e) => setVon(e.target.value)} />
+            <label>Bis (Datum)</label>
+            <input type="date" value={bis} onChange={(e) => setBis(e.target.value)} />
+          </div>
+          {vonS || bisS ? (
+            <>
+              <p className="muted">
+                {sortedBericht.length} Auftrag/Aufträge im Zeitraum · Summe Messung Graben: {berichtSumme.toFixed(1)} m
+              </p>
+              {sortedBericht.length === 0 ? (
+                <p className="muted">Keine Aufträge mit Termin in diesem Zeitraum.</p>
+              ) : (
+                <>
+                  <table className="bericht-table">
+                    <thead>
+                      <tr>
+                        <th>Termin</th>
+                        <th>Bezeichnung</th>
+                        <th>Adresse</th>
+                        <th>Messung Graben (m)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sortedBericht.map((a) => (
+                        <tr key={a.id}>
+                          <td>{formatTermin(a.termin) || '—'}</td>
+                          <td>{a.bezeichnung || '—'}</td>
+                          <td>{[a.adresse, a.plz, a.ort].filter(Boolean).join(', ') || '—'}</td>
+                          <td>{parseLaenge(a).toFixed(1)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr>
+                        <td colSpan={3}><strong>Tagessumme / Summe Zeitraum</strong></td>
+                        <td><strong>{berichtSumme.toFixed(1)} m</strong></td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                  <div className="bericht-actions" style={{ marginTop: '1rem', display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                    <button type="button" className="btn primary" onClick={() => openBerichtPdf(vonS, bisS, sortedBericht, berichtSumme)}>
+                      Als PDF speichern
+                    </button>
+                    <button type="button" className="btn ghost" onClick={() => { openBerichtPdf(vonS, bisS, sortedBericht, berichtSumme); openBerichtWhatsApp(vonS, bisS, sortedBericht, berichtSumme); }}>
+                      PDF erstellen & per WhatsApp teilen
+                    </button>
+                  </div>
+                </>
+              )}
+            </>
+          ) : (
+            <p className="muted">Von- und Bis-Datum wählen, um die Auflistung und Summe zu sehen.</p>
+          )}
+        </section>
+      </main>
+    </div>
+  )
+}
+
 export default function App() {
   return (
     <AuftraegeProvider>
@@ -1963,6 +1944,7 @@ export default function App() {
       )}
       <Routes>
         <Route path="/" element={<AuftragListe />} />
+        <Route path="/bericht" element={<BerichtNachDatumPage />} />
         <Route path="/auftrag/:id" element={<AuftragDetail />} />
         <Route path="/auftrag/:id/protokoll" element={<Abschlussprotokoll />} />
       </Routes>
