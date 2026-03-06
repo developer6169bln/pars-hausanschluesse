@@ -81,12 +81,37 @@
   align-items: center;
   gap: 0.5rem;
 }
-.form-stack .label-inline input[type="checkbox"] {
-  width: auto;
-  min-width: 1.25rem;
-  height: 1.25rem;
+/* Checkboxen: immer sichtbares Kästchen und Häkchen (Kreuz) bei aktiviertem Zustand */
+input[type="checkbox"] {
+  width: 1.35rem;
+  height: 1.35rem;
+  min-width: 1.35rem;
+  min-height: 1.35rem;
   margin-top: 0;
+  margin-right: 0;
   cursor: pointer;
+  accent-color: #2563eb;
+  -webkit-appearance: none;
+  appearance: none;
+  border: 2px solid #64748b;
+  border-radius: 0.35rem;
+  background: #fff;
+  flex-shrink: 0;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+input[type="checkbox"]:hover {
+  border-color: #2563eb;
+}
+input[type="checkbox"]:checked {
+  background: #2563eb url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 13l4 4L19 7'/%3E%3C/svg%3E") center/75% no-repeat;
+  border-color: #2563eb;
+}
+input[type="checkbox"]:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.35);
+}
+.form-stack .label-inline input[type="checkbox"] {
+  margin-top: 0;
 }
 label {
   font-size: 0.9rem;

@@ -129,6 +129,7 @@ const defaultAuftrag = {
   messungSonstiges: '',
   notizen: '',
   abgeschlossen: false,
+  inklusivMeter010: false, // Checkbox: Inklusiv Meter (0-10m)
   // Technische Metadaten aus Import (alle Spalten der Tabelle)
   sNr: '',
   bpEinf: '',
@@ -1617,6 +1618,14 @@ function AuftragDetail() {
                 onChange={(e) => setAuftrag((p) => ({ ...p, notizen: e.target.value }))}
                 placeholder="Notizen"
               />
+            </label>
+            <label className="label-inline">
+              <input
+                type="checkbox"
+                checked={!!auftrag.inklusivMeter010}
+                onChange={(e) => setAuftrag((p) => ({ ...p, inklusivMeter010: e.target.checked }))}
+              />
+              Inklusiv Meter (0-10m)
             </label>
             <label className="label-inline">
               <input
