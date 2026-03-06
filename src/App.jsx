@@ -209,13 +209,10 @@ function AuftragListe() {
     standort: null,
     plz: '',
     ort: '',
-    netzbetreiber: '',
-    auftragsDateien: [],
     dokumentationFotos: [],
     geoAceMessung: 'nein',
     geprueft: 'nein',
     messungGraben: '',
-    messungSonstiges: '',
     notizen: '',
     abgeschlossen: false,
     uebersichtsplanDownloadUrl: '',
@@ -527,14 +524,11 @@ function AuftragListe() {
       standort: form.standort,
       plz: form.plz.trim(),
       ort: form.ort.trim(),
-      netzbetreiber: form.netzbetreiber.trim(),
       geoAceMessung: form.geoAceMessung,
       geprueft: form.geprueft,
       messungGraben: form.messungGraben.trim(),
-      messungSonstiges: form.messungSonstiges.trim(),
       notizen: form.notizen.trim(),
       abgeschlossen: !!form.abgeschlossen,
-      auftragsDateien: form.auftragsDateien,
       dokumentationFotos: form.dokumentationFotos,
       uebersichtsplanDownloadUrl: form.uebersichtsplanDownloadUrl.trim(),
     }
@@ -550,13 +544,10 @@ function AuftragListe() {
       standort: null,
       plz: '',
       ort: '',
-      netzbetreiber: '',
-      auftragsDateien: [],
       dokumentationFotos: [],
       geoAceMessung: 'nein',
       geprueft: 'nein',
       messungGraben: '',
-      messungSonstiges: '',
       notizen: '',
       abgeschlossen: false,
       uebersichtsplanDownloadUrl: '',
@@ -664,15 +655,6 @@ function AuftragListe() {
               />
             </label>
             <label>
-              Netzbetreiber
-              <input
-                type="text"
-                value={form.netzbetreiber}
-                onChange={(e) => setForm((f) => ({ ...f, netzbetreiber: e.target.value }))}
-                placeholder="Netzbetreiber"
-              />
-            </label>
-            <label>
               Termin (Datum & Uhrzeit)
               <input
                 type="datetime-local"
@@ -706,18 +688,6 @@ function AuftragListe() {
               <p className="muted" style={{ marginTop: '0.35rem', fontSize: '0.8rem' }}>
                 Beim ersten Klick wird die Standortberechtigung angefragt (iPhone: „Standort zulassen“ tippen).
               </p>
-            </label>
-            <label>
-              Auftragsdateien hochladen (PDF)
-              <input
-                type="file"
-                accept=".pdf,application/pdf"
-                multiple
-                onChange={async (e) => {
-                  const atts = await filesToAttachments(e.target.files)
-                  setForm((f) => ({ ...f, auftragsDateien: atts }))
-                }}
-              />
             </label>
             <label>
               Auftragsdokumentation Fotos
@@ -774,14 +744,6 @@ function AuftragListe() {
                 type="text"
                 value={form.messungGraben}
                 onChange={(e) => setForm((f) => ({ ...f, messungGraben: e.target.value }))}
-              />
-            </label>
-            <label>
-              Messung sonstiges
-              <input
-                type="text"
-                value={form.messungSonstiges}
-                onChange={(e) => setForm((f) => ({ ...f, messungSonstiges: e.target.value }))}
               />
             </label>
             <label>
@@ -1169,55 +1131,7 @@ function AuftragDetail() {
         </section>
 
         <section className="card">
-          <h2>4. Aufmaß / Geoace (nur Referenz)</h2>
-          <div className="form-stack">
-            <label>
-              Geoace‑Vorgangsnummer
-              <input
-                type="text"
-                value={auftrag.geoaceVorgang}
-                onChange={(e) => setAuftrag((p) => ({ ...p, geoaceVorgang: e.target.value }))}
-                placeholder="Geoace‑Vorgangsnummer"
-              />
-            </label>
-            <label>
-              Länge Trasse (m)
-              <input
-                type="number"
-                min="0"
-                step="0.1"
-                value={auftrag.aufmassLaenge}
-                onChange={(e) => setAuftrag((p) => ({ ...p, aufmassLaenge: e.target.value }))}
-                inputMode="decimal"
-                placeholder="0"
-              />
-            </label>
-            <label>
-              Anzahl Hausanschlüsse
-              <input
-                type="number"
-                min="0"
-                step="1"
-                value={auftrag.anzahlHausanschluesse}
-                onChange={(e) => setAuftrag((p) => ({ ...p, anzahlHausanschluesse: e.target.value }))}
-                inputMode="numeric"
-                placeholder="0"
-              />
-            </label>
-            <label>
-              Bemerkungen zum Aufmaß
-              <textarea
-                rows={2}
-                value={auftrag.aufmassBemerkung}
-                onChange={(e) => setAuftrag((p) => ({ ...p, aufmassBemerkung: e.target.value }))}
-                placeholder="Bemerkungen zum Aufmaß"
-              />
-            </label>
-          </div>
-        </section>
-
-        <section className="card">
-          <h2>5. Messung & Abschluss</h2>
+          <h2>4. Messung & Abschluss</h2>
           <div className="form-stack">
             <label>
               GEO ACE Messung
