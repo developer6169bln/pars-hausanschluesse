@@ -10,7 +10,8 @@ So hostest du den Auftragspool-Server bei Railway (kostenlos nutzbar). Danach br
 
 - **New Project** → **Deploy from GitHub repo**
 - Repo auswählen: `pars-hausanschluesse` (oder dein Fork)
-- Railway erstellt ein neues Projekt und startet einen Build.
+- **Branch:** `main` (oder den Branch, auf den du pushst)
+- Railway erstellt ein neues Projekt und startet einen Build. Bei jedem **Push** auf den verbundenen Branch wird automatisch neu gebaut und deployed.
 
 ## 3. Root-Verzeichnis, Build und Start
 
@@ -81,3 +82,12 @@ Dort siehst du: `dataDir` (sollte `/data` sein), `dataDirFromEnv: true`, `auftra
 - Frontend wurde mit dieser URL als `VITE_API_URL` gebaut bzw. gestartet.
 
 Dann können alle die gleiche Auftragspool-URL nutzen, ohne lokal `npm run server` zu starten.
+
+---
+
+## Wenn „Push bei Railway nicht durchgeht“
+
+- **Deploy wird nicht ausgelöst:** Im Railway-Dashboard den Service öffnen → **Settings** → **Source**. Prüfen: Ist das richtige **GitHub-Repo** verbunden und der richtige **Branch** (z. B. `main`) eingestellt? Ohne Verbindung löst ein Push kein Deploy aus.
+- **Manuell neu deployen:** Im Projekt **Deployments** → **Deploy** / **Redeploy** (oder „Trigger Deploy“), damit der letzte Stand aus dem Repo neu gebaut wird.
+- **Deploy schlägt fehl:** Unter **Deployments** den fehlgeschlagenen Deploy öffnen → **View Logs**. Dort siehst du Build- oder Runtime-Fehler (z. B. fehlende Abhängigkeiten, falscher Start-Befehl). Build Command = `npm run build`, Start Command = `node server/index.js`.
+- **GitHub-Berechtigung:** Falls Railway das Repo nicht sieht: Bei GitHub unter **Settings → Applications → Railway** prüfen, ob Railway Zugriff auf das Repository hat.
