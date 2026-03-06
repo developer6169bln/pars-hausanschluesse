@@ -327,6 +327,7 @@ function AuftragListe() {
   const [importVorschau, setImportVorschau] = useState([])
   const [berichtVon, setBerichtVon] = useState('')
   const [berichtBis, setBerichtBis] = useState('')
+  const [showNeuerAuftragForm, setShowNeuerAuftragForm] = useState(false)
   const [standortStatus, setStandortStatus] = useState('') // '' | 'loading' | 'ok' | 'error'
   const [ortsanwesenheitStatus, setOrtsanwesenheitStatus] = useState('') // '' | 'loading' | 'ok' | 'error'
 
@@ -779,15 +780,15 @@ function AuftragListe() {
   }
 
   const addAuftrag = () => {
-    if (!form.strasse.trim() || !form.hausnummer.trim()) return
+    const adr = (form.adresse || '').trim() || ([form.strasse, form.hausnummer].filter(Boolean).join(' ').trim())
+    const bezeichnung = (form.bezeichnung || '').trim() || adr
+    if (!bezeichnung || !adr) return
     const id = Date.now()
-    const adresse = `${form.strasse} ${form.hausnummer}`.trim()
-    const bezeichnung = adresse
     const neu = {
       id,
       ...defaultAuftrag,
       bezeichnung,
-      adresse,
+      adresse: adr,
       termin: (form.termin || '').trim(),
       verbundGroesse: (form.verbundGroesse || '').trim(),
       verbundFarbe: (form.verbundFarbe || '').trim(),
@@ -820,6 +821,8 @@ function AuftragListe() {
       pipesFarbe2: '',
       strasse: '',
       hausnummer: '',
+      bezeichnung: '',
+      adresse: '',
       kontaktName: '',
       telefon: '',
       nvt: '',
@@ -836,6 +839,7 @@ function AuftragListe() {
       abgeschlossen: false,
       uebersichtsplanDownloadUrl: '',
     })
+    setShowNeuerAuftragForm(false)
   }
 
   return (
@@ -854,8 +858,28 @@ function AuftragListe() {
       </header>
 
       <main className="content">
+        {!showNeuerAuftragForm ? (
+          <section className="card">
+            <button
+              type="button"
+              className="btn primary"
+              onClick={() => setShowNeuerAuftragForm(true)}
+              style={{ fontSize: '1rem', padding: '0.6rem 1.25rem' }}
+            >
+              + Neuer Auftrag
+            </button>
+            <p className="muted" style={{ marginTop: '0.5rem', marginBottom: 0 }}>
+              Klicken, um einen neuen Auftrag zu erfassen. Nach dem Speichern gelangen Sie zurück zur Übersicht.
+            </p>
+          </section>
+        ) : (
         <section className="card">
-          <h2>Neuer Auftrag</h2>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1rem' }}>
+            <h2 style={{ margin: 0 }}>Neuer Auftrag</h2>
+            <button type="button" className="btn ghost" onClick={() => setShowNeuerAuftragForm(false)}>
+              Abbrechen
+            </button>
+          </div>
           <div className="form-stack">
             <label>
               Straße *
@@ -1161,9 +1185,10 @@ function AuftragListe() {
             </label>
           </div>
           <button className="btn primary" type="button" onClick={addAuftrag}>
-            Auftrag anlegen
+            Auftrag speichern
           </button>
         </section>
+        )}
 
         <section className="card">
           <h2>Auftragsliste</h2>
