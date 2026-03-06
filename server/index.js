@@ -12,9 +12,12 @@ const API_BASE = process.env.API_BASE || `http://localhost:${PORT}`
 // So gehen Aufträge und Uploads bei Redeploy nicht verloren.
 const DATA_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : __dirname
 const UPLOAD_DIR = path.join(DATA_DIR, 'uploads')
+const BACKUPS_DIR = path.join(DATA_DIR, 'backups')
 const AUFTRAEGE_FILE = path.join(DATA_DIR, 'auftraege.json')
+const BACKUP_LATEST = path.join(DATA_DIR, 'auftraege-backup-latest.json')
+const MAX_BACKUP_FILES = 30 // Anzahl zeitgestempelter Backups (älteste werden gelöscht)
 
-// DATA_DIR und Upload-Ordner anlegen (wichtig für Volume: muss existieren)
+// DATA_DIR, Upload- und Backup-Ordner anlegen (wichtig für Volume: muss existieren)
 try {
   if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true })
@@ -23,6 +26,10 @@ try {
   if (!fs.existsSync(UPLOAD_DIR)) {
     fs.mkdirSync(UPLOAD_DIR, { recursive: true })
     console.log('UPLOAD_DIR erstellt:', UPLOAD_DIR)
+  }
+  if (!fs.existsSync(BACKUPS_DIR)) {
+    fs.mkdirSync(BACKUPS_DIR, { recursive: true })
+    console.log('Backup-Ordner erstellt:', BACKUPS_DIR)
   }
 } catch (err) {
   console.error('Fehler beim Anlegen der Verzeichnisse:', err.message)
@@ -46,9 +53,36 @@ function readAuftraege() {
   }
 }
 
+/** Nach jeder Änderung Sicherung anlegen, damit keine Auftragsdaten verloren gehen. */
+function createBackups(list) {
+  const json = JSON.stringify(list)
+  try {
+    fs.writeFileSync(BACKUP_LATEST, json, 'utf8')
+  } catch (err) {
+    console.error('Backup (latest) fehlgeschlagen:', err.message)
+  }
+  try {
+    const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+    const name = `auftraege-${ts}.json`
+    const file = path.join(BACKUPS_DIR, name)
+    fs.writeFileSync(file, json, 'utf8')
+    const files = fs.readdirSync(BACKUPS_DIR).filter((f) => f.startsWith('auftraege-') && f.endsWith('.json'))
+    files.sort()
+    while (files.length > MAX_BACKUP_FILES) {
+      const oldest = files.shift()
+      try {
+        fs.unlinkSync(path.join(BACKUPS_DIR, oldest))
+      } catch (_) {}
+    }
+  } catch (err) {
+    console.error('Backup (zeitgestempelt) fehlgeschlagen:', err.message)
+  }
+}
+
 function writeAuftraege(list) {
   try {
     fs.writeFileSync(AUFTRAEGE_FILE, JSON.stringify(list), 'utf8')
+    createBackups(list)
   } catch (err) {
     console.error('Schreibfehler auftraege.json:', err.message, 'Pfad:', AUFTRAEGE_FILE)
     throw err
@@ -91,9 +125,11 @@ app.get('/api/debug', (_req, res) => {
   const list = readAuftraege()
   const dataDirFromEnv = Boolean(process.env.DATA_DIR)
   let uploadFileCount = 0
+  let backupCount = 0
   try {
-    if (fs.existsSync(UPLOAD_DIR)) {
-      uploadFileCount = fs.readdirSync(UPLOAD_DIR).length
+    if (fs.existsSync(UPLOAD_DIR)) uploadFileCount = fs.readdirSync(UPLOAD_DIR).length
+    if (fs.existsSync(BACKUPS_DIR)) {
+      backupCount = fs.readdirSync(BACKUPS_DIR).filter((f) => f.startsWith('auftraege-') && f.endsWith('.json')).length
     }
   } catch (_) {}
   res.json({
@@ -102,6 +138,8 @@ app.get('/api/debug', (_req, res) => {
     auftraegeFileExists: fs.existsSync(AUFTRAEGE_FILE),
     uploadDirExists: fs.existsSync(UPLOAD_DIR),
     uploadFileCount,
+    backupLatestExists: fs.existsSync(BACKUP_LATEST),
+    backupCount,
     dataDirFromEnv,
     count: Array.isArray(list) ? list.length : 0,
     warning: !dataDirFromEnv && process.env.PORT
