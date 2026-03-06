@@ -385,7 +385,10 @@ function AuftragListe() {
       <div className="termin-groups">
         {groups.map((g) => (
           <div key={g.key} className="termin-group">
-            <div className="termin-group-title">{g.label}</div>
+            <div className="termin-group-title">
+              {g.label}
+              <span className="termin-group-sum"> · {g.items.reduce((s, a) => s + parseLaenge(a), 0).toFixed(1)} m</span>
+            </div>
             <ul className="list">
               {g.items.map(renderAuftragListenItem)}
             </ul>
@@ -1002,7 +1005,7 @@ function AuftragListe() {
             <>
               <p className="muted">
                 Offene Aufträge: {offeneAuftraege.length} · Abgeschlossen: {abgeschlosseneAuftraege.length} ·{' '}
-                Gesamtlänge: {summeGesamt.toFixed(1)} m
+                Länge offen: {summeOffen.toFixed(1)} m · Länge abgeschlossen: {summeAbgeschlossen.toFixed(1)} m · Gesamtlänge: {summeGesamt.toFixed(1)} m
               </p>
 
               <h3>Offene Aufträge</h3>

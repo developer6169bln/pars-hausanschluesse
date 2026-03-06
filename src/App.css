@@ -312,6 +312,11 @@ textarea {
   color: #1e293b;
   margin: 0.25rem 0 0.25rem;
 }
+.termin-group-sum {
+  font-weight: 600;
+  color: #475569;
+  font-size: 0.9em;
+}
 .muted {
   font-size: 0.85rem;
   color: #9ca3af;
