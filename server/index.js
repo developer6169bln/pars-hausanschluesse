@@ -31,6 +31,10 @@ try {
 const dataDirIsVolume = Boolean(process.env.DATA_DIR)
 console.log('Datenverzeichnis:', DATA_DIR, dataDirIsVolume ? '(persistent, DATA_DIR gesetzt)' : '(lokal)')
 console.log('Aufträge-Datei:', AUFTRAEGE_FILE)
+if (!dataDirIsVolume && process.env.PORT) {
+  console.warn('⚠️ DATA_DIR ist nicht gesetzt – bei jedem Redeploy gehen alle Aufträge und Uploads verloren!')
+  console.warn('   Lösung: Railway Volume unter /data mounten und Umgebungsvariable DATA_DIR=/data setzen.')
+}
 
 function readAuftraege() {
   try {
@@ -85,13 +89,24 @@ app.get('/api/auftraege', (_req, res) => {
 // Debug: prüfen, ob DATA_DIR/Volume genutzt wird und Datei existiert (z. B. /api/debug aufrufen)
 app.get('/api/debug', (_req, res) => {
   const list = readAuftraege()
+  const dataDirFromEnv = Boolean(process.env.DATA_DIR)
+  let uploadFileCount = 0
+  try {
+    if (fs.existsSync(UPLOAD_DIR)) {
+      uploadFileCount = fs.readdirSync(UPLOAD_DIR).length
+    }
+  } catch (_) {}
   res.json({
     dataDir: DATA_DIR,
     auftraegeFile: AUFTRAEGE_FILE,
     auftraegeFileExists: fs.existsSync(AUFTRAEGE_FILE),
     uploadDirExists: fs.existsSync(UPLOAD_DIR),
-    dataDirFromEnv: Boolean(process.env.DATA_DIR),
+    uploadFileCount,
+    dataDirFromEnv,
     count: Array.isArray(list) ? list.length : 0,
+    warning: !dataDirFromEnv && process.env.PORT
+      ? 'DATA_DIR nicht gesetzt – Daten gehen bei Redeploy verloren. Volume + DATA_DIR=/data einrichten.'
+      : null,
   })
 })
 

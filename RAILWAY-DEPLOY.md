@@ -2,6 +2,9 @@
 
 So hostest du den Auftragspool-Server bei Railway (kostenlos nutzbar). Danach brauchst du lokal keinen `npm run server` mehr – alle nutzen die gleiche URL.
 
+> **⚠️ Ohne persistenten Speicher (Volume + DATA_DIR) gehen bei jedem Redeploy alle Aufträge und Uploads verloren.**  
+> Wenn nach dem Deployment abgeschlossene oder neu angelegte Aufträge weg sind: **Volume und DATA_DIR einrichten** (siehe Abschnitt 6). Danach bleiben die Daten bei weiteren Deploys erhalten.
+
 ## 1. Bei Railway anmelden
 
 - Gehe zu [railway.app](https://railway.app) und melde dich an (z.B. mit GitHub).
@@ -53,7 +56,10 @@ Wenn du auch das Frontend auf Railway (oder z.B. Vercel/Netlify) deployst, dort 
 
 ## 6. **Wichtig: Aufträge dauerhaft speichern (kein Datenverlust bei Redeploy)**
 
-Ohne persistenten Speicher gehen **alle Aufträge und hochgeladenen Dateien bei jedem Redeploy verloren**. Damit die Daten bleiben:
+**Warum sind meine Aufträge nach dem Deploy weg?**  
+Railway startet bei jedem Deploy einen neuen Container mit leerem Dateisystem. Ohne ein **Volume** und die Variable **DATA_DIR** schreibt der Server in dieses temporäre Dateisystem – nach dem nächsten Deploy ist alles weg (abgeschlossene und neue Aufträge, Uploads).
+
+Damit die Daten **dauerhaft** bleiben:
 
 1. **Volume hinzufügen**
    - Im Railway-Dashboard: deinen Service öffnen → **Settings** → **Volumes**
@@ -72,7 +78,9 @@ Danach speichert der Server `auftraege.json` und den Ordner `uploads/` unter `/d
 **Hinweis:** Aufträge, die vor dem Einrichten des Volumes angelegt wurden, sind nach einem Redeploy leider weg. Ab jetzt gehen keine Daten mehr verloren, wenn du das Volume wie oben einrichtest.
 
 **Prüfen, ob es funktioniert:** Nach Redeploy im Browser aufrufen: `https://deine-app.up.railway.app/api/debug`  
-Dort siehst du: `dataDir` (sollte `/data` sein), `dataDirFromEnv: true`, `auftraegeFileExists`. Wenn beim Speichern etwas schiefgeht, liefert der Server Fehlermeldungen; in den Railway-Logs unter **Deployments → View Logs** erscheinen dann z. B. Schreibfehler.
+- `dataDir` sollte `/data` sein, `dataDirFromEnv: true`.  
+- Steht dort `"warning": "DATA_DIR nicht gesetzt – ..."`, ist das Volume bzw. DATA_DIR noch nicht korrekt eingerichtet – dann gehen bei jedem weiteren Deploy die Daten verloren.  
+- In den Railway-Logs (**Deployments → View Logs**) steht beim Start entweder `Datenverzeichnis: /data (persistent)` oder eine Warnung, dass DATA_DIR fehlt.
 
 ## 7. Kurz-Check
 
