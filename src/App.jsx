@@ -1,4 +1,4 @@
-import { Routes, Route, Link, useNavigate, useParams } from 'react-router-dom'
+import { Routes, Route, Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useState, useEffect, createContext, useContext } from 'react'
 
 const AuftraegeContext = createContext(null)
@@ -1631,7 +1631,22 @@ function AuftragDetail() {
               <input
                 type="checkbox"
                 checked={!!auftrag.abgeschlossen}
-                onChange={(e) => setAuftrag((p) => ({ ...p, abgeschlossen: e.target.checked }))}
+                onChange={(e) => {
+                  const checked = e.target.checked
+                  setAuftrag((p) => ({ ...p, abgeschlossen: checked }))
+                  if (checked && auftrag?.id) {
+                    setAuftraege((list) =>
+                      list.map((a) =>
+                        String(a.id) === String(auftrag.id)
+                          ? { ...defaultAuftrag, ...a, ...auftrag, abgeschlossen: true, id: a.id }
+                          : a
+                      )
+                    )
+                    const base = window.location.pathname.replace(/\/auftrag\/[^/]*$/, '') || '/'
+                    const protokollUrl = `${base.replace(/\/$/, '')}/auftrag/${auftrag.id}/protokoll?print=1`
+                    setTimeout(() => window.open(protokollUrl, '_blank', 'noopener'), 400)
+                  }
+                }}
               />
               Auftrag abgeschlossen
             </label>
@@ -1683,17 +1698,25 @@ function buildProtokollText(a) {
 
 function Abschlussprotokoll() {
   const { id } = useParams()
-  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [auftraege] = useAuftraege()
   const auftrag = (auftraege || []).find((a) => String(a.id) === String(id))
   const fotos = auftrag?.dokumentationFotos || []
 
   const handlePrint = () => window.print()
   const handleWhatsApp = () => {
+    window.print()
     const text = buildProtokollText(auftrag)
     const url = `https://wa.me/?text=${encodeURIComponent(text)}`
-    window.open(url, '_blank', 'noopener,noreferrer')
+    setTimeout(() => window.open(url, '_blank', 'noopener,noreferrer'), 600)
   }
+
+  useEffect(() => {
+    if (searchParams.get('print') === '1') {
+      const t = setTimeout(() => window.print(), 800)
+      return () => clearTimeout(t)
+    }
+  }, [searchParams])
 
   if (!auftrag) {
     return (
