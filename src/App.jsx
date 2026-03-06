@@ -65,33 +65,40 @@ function compressDataUrl(dataUrl) {
   })
 }
 
+const readOneAsDataUrl = async (file) => {
+  const dataUrl = await new Promise((resolve) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '')
+    reader.onerror = () => resolve('')
+    reader.readAsDataURL(file)
+  })
+  const compressed = await compressDataUrl(dataUrl)
+  return {
+    name: file.name,
+    type: file.type,
+    size: file.size,
+    lastModified: file.lastModified,
+    dataUrl: compressed,
+  }
+}
+
+/** Nimmt File-Liste (oder Array), lädt auf Server hoch oder speichert als Data-URL. Gibt immer ein Array zurück. */
 const filesToAttachments = async (files) => {
   const list = Array.from(files || [])
   if (!list.length) return []
-  if (API_BASE) {
-    try {
-      return await Promise.all(list.map((file) => uploadOneToServer(file)))
-    } catch (e) {
-      console.warn('Server-Upload fehlgeschlagen, Fallback auf lokale Speicherung', e)
+  try {
+    if (API_BASE) {
+      try {
+        return await Promise.all(list.map((file) => uploadOneToServer(file)))
+      } catch (e) {
+        console.warn('Server-Upload fehlgeschlagen, Fallback auf lokale Speicherung', e)
+      }
     }
+    return await Promise.all(list.map(readOneAsDataUrl))
+  } catch (e) {
+    console.error('Fotos konnten nicht verarbeitet werden:', e)
+    return []
   }
-  const readOne = async (file) => {
-    const dataUrl = await new Promise((resolve) => {
-      const reader = new FileReader()
-      reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '')
-      reader.onerror = () => resolve('')
-      reader.readAsDataURL(file)
-    })
-    const compressed = await compressDataUrl(dataUrl)
-    return {
-      name: file.name,
-      type: file.type,
-      size: file.size,
-      lastModified: file.lastModified,
-      dataUrl: compressed,
-    }
-  }
-  return await Promise.all(list.map(readOne))
 }
 
 const defaultAuftrag = {
@@ -1005,8 +1012,11 @@ function AuftragListe() {
                 accept="image/*"
                 multiple
                 onChange={async (e) => {
-                  const atts = await filesToAttachments(e.target.files)
-                  setForm((f) => ({ ...f, dokumentationFotos: atts }))
+                  const list = Array.from(e.target.files || [])
+                  e.target.value = ''
+                  if (!list.length) return
+                  const atts = await filesToAttachments(list)
+                  if (atts?.length) setForm((f) => ({ ...f, dokumentationFotos: [...(f.dokumentationFotos || []), ...atts] }))
                 }}
               />
             </label>
@@ -1529,13 +1539,14 @@ function AuftragDetail() {
                   multiple
                   style={{ display: 'none' }}
                   onChange={async (e) => {
-                    const atts = await filesToAttachments(e.target.files)
-                    if (!atts.length) return
-                    setAuftrag((p) => ({
+                    const list = Array.from(e.target.files || [])
+                    e.target.value = ''
+                    if (!list.length) return
+                    const atts = await filesToAttachments(list)
+                    if (atts?.length) setAuftrag((p) => ({
                       ...p,
                       dokumentationFotos: [...(p.dokumentationFotos || []), ...atts],
                     }))
-                    e.target.value = ''
                   }}
                 />
                 <label className="btn ghost" style={{ margin: 0 }}>
@@ -1546,13 +1557,14 @@ function AuftragDetail() {
                     multiple
                     style={{ display: 'none' }}
                     onChange={async (e) => {
-                      const atts = await filesToAttachments(e.target.files)
-                      if (!atts.length) return
-                      setAuftrag((p) => ({
+                      const list = Array.from(e.target.files || [])
+                      e.target.value = ''
+                      if (!list.length) return
+                      const atts = await filesToAttachments(list)
+                      if (atts?.length) setAuftrag((p) => ({
                         ...p,
                         dokumentationFotos: [...(p.dokumentationFotos || []), ...atts],
                       }))
-                      e.target.value = ''
                     }}
                   />
                 </label>
