@@ -7,7 +7,15 @@ const STORAGE_AUFTRAEGE = 'haus-auftraege'
 const MAX_IMAGE_WIDTH = 800
 const JPEG_QUALITY = 0.75
 
-const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
+// API-URL:
+// - Lokal: über VITE_API_URL (z.B. http://localhost:3010)
+// - Produktion (Railway, gleiche Domain für Frontend+API): Fallback auf window.location.origin,
+//   damit der Auftragspool auch ohne gesetztes VITE_API_URL funktioniert.
+const API_BASE = (
+  import.meta.env.VITE_API_URL ||
+  ((import.meta.env.PROD && typeof window !== 'undefined' && window.location?.origin) ? window.location.origin : '') ||
+  ''
+).replace(/\/$/, '')
 
 function getAttachmentSrc(item) {
   return item?.url || item?.dataUrl || ''
