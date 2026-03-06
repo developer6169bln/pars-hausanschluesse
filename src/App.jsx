@@ -506,6 +506,11 @@ function AuftragListe() {
           <Link className="btn ghost" to={`/auftrag/${a.id}`}>
             Bearbeiten
           </Link>
+          {isAbgeschlossen(a) && (
+            <Link className="btn ghost" to={`/auftrag/${a.id}/protokoll`} target="_blank" rel="noopener noreferrer" title="Abschlussprotokoll">
+              Protokoll
+            </Link>
+          )}
           <button
             type="button"
             className="btn btn-delete"
@@ -1458,12 +1463,107 @@ function AuftragDetail() {
             ✓ Gespeichert. Weiterleitung zur Übersicht…
           </p>
         )}
-        <button className="btn primary" type="button" onClick={speichern} disabled={saveStatus === 'gespeichert'}>
-          Auftrag speichern
-        </button>
+        <div className="detail-actions">
+          <button className="btn primary" type="button" onClick={speichern} disabled={saveStatus === 'gespeichert'}>
+            Auftrag speichern
+          </button>
+          {!!auftrag.abgeschlossen && (
+            <Link className="btn ghost" to={`/auftrag/${auftrag.id}/protokoll`} target="_blank" rel="noopener noreferrer">
+              Abschlussprotokoll
+            </Link>
+          )}
+        </div>
           </main>
         </>
       )}
+    </div>
+  )
+}
+
+function buildProtokollText(a) {
+  if (!a) return ''
+  const lines = [
+    `Abschlussprotokoll – ${a.bezeichnung || 'Auftrag'}`,
+    '',
+    `Adresse: ${[a.adresse, a.plz, a.ort].filter(Boolean).join(', ') || '—'}`,
+    a.termin ? `Termin: ${a.termin}` : null,
+    a.verbundFarbe ? `Verbund: ${a.verbundFarbe}` : null,
+    (a.pipesFarbe1 || a.pipesFarbe2) ? `Pipes: ${a.pipesFarbe1 || '—'} / ${a.pipesFarbe2 || a.pipesFarbe1 || '—'}` : null,
+    a.kontaktName || a.telefon ? `Kontakt: ${[a.kontaktName, a.telefon].filter(Boolean).join(', ') || '—'}` : null,
+    a.notizen ? `Notizen: ${a.notizen}` : null,
+  ].filter(Boolean)
+  return lines.join('\n')
+}
+
+function Abschlussprotokoll() {
+  const { id } = useParams()
+  const navigate = useNavigate()
+  const [auftraege] = useAuftraege()
+  const auftrag = (auftraege || []).find((a) => String(a.id) === String(id))
+  const fotos = auftrag?.dokumentationFotos || []
+
+  const handlePrint = () => window.print()
+  const handleWhatsApp = () => {
+    const text = buildProtokollText(auftrag)
+    const url = `https://wa.me/?text=${encodeURIComponent(text)}`
+    window.open(url, '_blank', 'noopener,noreferrer')
+  }
+
+  if (!auftrag) {
+    return (
+      <div className="page">
+        <p className="muted">Auftrag nicht gefunden.</p>
+        <Link to="/">Zurück zur Übersicht</Link>
+      </div>
+    )
+  }
+
+  return (
+    <div className="page protokoll-page">
+      <div className="no-print protokoll-actions">
+        <Link className="btn ghost" to="/">← Zurück</Link>
+        <button type="button" className="btn primary" onClick={handlePrint}>
+          Als PDF speichern
+        </button>
+        <button type="button" className="btn ghost" onClick={handleWhatsApp}>
+          Per WhatsApp teilen
+        </button>
+      </div>
+      <div className="protokoll-content">
+        <header className="protokoll-header">
+          <img src="https://parsbau.de/wp-content/uploads/2023/10/logo-pars22-e1696588277925.jpg" alt="PARS Bau" className="protokoll-logo" />
+          <h1>Abschlussprotokoll</h1>
+          <p className="protokoll-date">Erstellt am {new Date().toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+        </header>
+        <section className="protokoll-section">
+          <h2>Auftrag</h2>
+          <dl className="protokoll-dl">
+            <dt>Bezeichnung</dt><dd>{auftrag.bezeichnung || '—'}</dd>
+            <dt>Adresse</dt><dd>{[auftrag.adresse, auftrag.plz, auftrag.ort].filter(Boolean).join(', ') || '—'}</dd>
+            <dt>Termin</dt><dd>{auftrag.termin ? new Date(auftrag.termin).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' }) : '—'}</dd>
+            <dt>Verbund Größe</dt><dd>{auftrag.verbundGroesse || '—'}</dd>
+            <dt>Verbund Farbe</dt><dd>{auftrag.verbundFarbe || '—'}</dd>
+            <dt>Pipes Farbe</dt><dd>{(auftrag.pipesFarbe1 || auftrag.pipesFarbe2) ? `${auftrag.pipesFarbe1 || '—'} / ${auftrag.pipesFarbe2 || auftrag.pipesFarbe1 || '—'}` : '—'}</dd>
+            <dt>Kontakt</dt><dd>{auftrag.kontaktName || '—'}</dd>
+            <dt>Telefon</dt><dd>{auftrag.telefon || '—'}</dd>
+            <dt>NVT / Standort</dt><dd>{[auftrag.nvt, auftrag.nvtStandort].filter(Boolean).join(' – ') || '—'}</dd>
+            {auftrag.notizen ? (<><dt>Notizen</dt><dd>{auftrag.notizen}</dd></>) : null}
+          </dl>
+        </section>
+        {fotos.length > 0 && (
+          <section className="protokoll-section">
+            <h2>Fotos ({fotos.length})</h2>
+            <div className="protokoll-fotos">
+              {fotos.map((att, i) => (
+                <figure key={i} className="protokoll-foto">
+                  <img src={getAttachmentSrc(att)} alt={`Foto ${i + 1}`} crossOrigin="anonymous" />
+                  <figcaption>Foto {i + 1}</figcaption>
+                </figure>
+              ))}
+            </div>
+          </section>
+        )}
+      </div>
     </div>
   )
 }
@@ -1479,6 +1579,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<AuftragListe />} />
         <Route path="/auftrag/:id" element={<AuftragDetail />} />
+        <Route path="/auftrag/:id/protokoll" element={<Abschlussprotokoll />} />
       </Routes>
     </AuftraegeProvider>
   )
