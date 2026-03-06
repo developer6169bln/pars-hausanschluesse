@@ -95,6 +95,7 @@ const defaultAuftrag = {
   netzbetreiber: '',
   status: 'eingang',
   // Stammdaten / Kontakt
+  termin: '', // datetime-local string: YYYY-MM-DDTHH:mm
   strasse: '',
   hausnummer: '',
   kontaktName: '',
@@ -198,6 +199,7 @@ function useAuftraege() {
 function AuftragListe() {
   const [auftraege, setAuftraege, loaded, fetchError, reload] = useAuftraege()
   const [form, setForm] = useState({
+    termin: '',
     strasse: '',
     hausnummer: '',
     kontaktName: '',
@@ -257,8 +259,39 @@ function AuftragListe() {
     return Number.isFinite(num) ? num : 0
   }
 
-  const offeneAuftraege = auftraege.filter((a) => !a.abgeschlossen)
-  const abgeschlosseneAuftraege = auftraege.filter((a) => a.abgeschlossen)
+  const terminToTs = (termin) => {
+    const t = (termin || '').trim()
+    if (!t) return Number.POSITIVE_INFINITY
+    const m = t.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/)
+    if (!m) return Number.POSITIVE_INFINITY
+    const y = Number(m[1])
+    const mo = Number(m[2])
+    const d = Number(m[3])
+    const h = Number(m[4])
+    const mi = Number(m[5])
+    return new Date(y, mo - 1, d, h, mi, 0, 0).getTime()
+  }
+
+  const formatTermin = (termin) => {
+    const ts = terminToTs(termin)
+    if (!Number.isFinite(ts) || ts === Number.POSITIVE_INFINITY) return ''
+    try {
+      return new Date(ts).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })
+    } catch {
+      return String(termin || '')
+    }
+  }
+
+  const sortByTermin = (list) =>
+    [...(list || [])].sort((a, b) => {
+      const da = terminToTs(a?.termin)
+      const db = terminToTs(b?.termin)
+      if (da !== db) return da - db
+      return String(a?.bezeichnung || '').localeCompare(String(b?.bezeichnung || ''), 'de')
+    })
+
+  const offeneAuftraege = sortByTermin(auftraege.filter((a) => !a.abgeschlossen))
+  const abgeschlosseneAuftraege = sortByTermin(auftraege.filter((a) => a.abgeschlossen))
   const summeOffen = offeneAuftraege.reduce((sum, a) => sum + parseLaenge(a), 0)
   const summeAbgeschlossen = abgeschlosseneAuftraege.reduce((sum, a) => sum + parseLaenge(a), 0)
   const summeGesamt = summeOffen + summeAbgeschlossen
@@ -289,6 +322,7 @@ function AuftragListe() {
     const fotos = a.dokumentationFotos || []
     const hasFotos = fotos.length > 0
     const firstThumb = hasFotos ? getAttachmentSrc(fotos[0]) : null
+    const terminText = (a.termin || '').trim() ? formatTermin(a.termin) : ''
     return (
       <li key={a.id} className="list-item">
         <div>
@@ -297,6 +331,7 @@ function AuftragListe() {
             {a.adresse}
             {a.ort ? `, ${a.ort}` : ''}
             {a.netzbetreiber ? ` · ${a.netzbetreiber}` : ''}
+            {terminText ? ` · Termin: ${terminText}` : ''}
             {a.aufmassLaenge && (
               <> · Länge: {String(a.aufmassLaenge).replace('.', ',')} m</>
             )}
@@ -482,6 +517,7 @@ function AuftragListe() {
       ...defaultAuftrag,
       bezeichnung,
       adresse,
+      termin: (form.termin || '').trim(),
       strasse: form.strasse.trim(),
       hausnummer: form.hausnummer.trim(),
       kontaktName: form.kontaktName.trim(),
@@ -504,6 +540,7 @@ function AuftragListe() {
     }
     setAuftraege((a) => [neu, ...a])
     setForm({
+      termin: '',
       strasse: '',
       hausnummer: '',
       kontaktName: '',
@@ -633,6 +670,14 @@ function AuftragListe() {
                 value={form.netzbetreiber}
                 onChange={(e) => setForm((f) => ({ ...f, netzbetreiber: e.target.value }))}
                 placeholder="Netzbetreiber"
+              />
+            </label>
+            <label>
+              Termin (Datum & Uhrzeit)
+              <input
+                type="datetime-local"
+                value={form.termin}
+                onChange={(e) => setForm((f) => ({ ...f, termin: e.target.value }))}
               />
             </label>
             <label>
@@ -948,6 +993,14 @@ function AuftragDetail() {
                 value={auftrag.adresse}
                 onChange={(e) => setAuftrag((p) => ({ ...p, adresse: e.target.value }))}
                 placeholder="Straße und Hausnummer"
+              />
+            </label>
+            <label>
+              Termin (Datum & Uhrzeit)
+              <input
+                type="datetime-local"
+                value={auftrag.termin ?? ''}
+                onChange={(e) => setAuftrag((p) => ({ ...p, termin: e.target.value }))}
               />
             </label>
             <label>
