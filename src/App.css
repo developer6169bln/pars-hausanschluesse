@@ -195,6 +195,53 @@ textarea {
   align-items: center;
   gap: 0.5rem;
 }
+.nav-link {
+  color: #1d4ed8;
+  text-decoration: underline;
+  font-weight: 600;
+}
+.nav-link:hover {
+  color: #2563eb;
+}
+
+.select-with-swatch {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.select-with-swatch select {
+  flex: 1 1 auto;
+}
+.color-swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 1px solid rgba(15, 23, 42, 0.22);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12);
+  display: inline-block;
+}
+.color-swatch.is-white {
+  border: 1px solid rgba(15, 23, 42, 0.35);
+}
+.color-pair {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.pipes-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
+.pipes-row .color-pair {
+  margin-left: auto;
+}
+@media (max-width: 640px) {
+  .pipes-row .color-pair {
+    margin-left: 0;
+  }
+}
 .foto-thumb-btn {
   position: relative;
   display: inline-flex;

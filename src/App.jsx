@@ -104,6 +104,10 @@ const defaultAuftrag = {
   status: 'eingang',
   // Stammdaten / Kontakt
   termin: '', // datetime-local string: YYYY-MM-DDTHH:mm
+  verbundGroesse: '', // 22x7 | 8x7 | 12x7
+  verbundFarbe: '', // Orange | Orange/Schwarz | Orange/Weiß | Orange/Rot
+  pipesFarbe1: '', // Farbnamen
+  pipesFarbe2: '',
   strasse: '',
   hausnummer: '',
   kontaktName: '',
@@ -144,6 +148,59 @@ const defaultAuftrag = {
   aufmassLaenge: '',
   anzahlHausanschluesse: '',
   aufmassBemerkung: '',
+}
+
+const COLOR_HEX = {
+  rot: '#ef4444',
+  grün: '#22c55e',
+  blau: '#3b82f6',
+  gelb: '#facc15',
+  weiß: '#ffffff',
+  grau: '#9ca3af',
+  braun: '#a16207',
+  violett: '#8b5cf6',
+  türkis: '#06b6d4',
+  schwarz: '#111827',
+  orange: '#f97316',
+  rosa: '#ec4899',
+}
+
+const normalizeColorKey = (name) => (name || '').toString().trim().toLowerCase()
+
+function ColorSwatch({ name }) {
+  const key = normalizeColorKey(name)
+  const hex = COLOR_HEX[key]
+  if (!hex) return null
+  const isWhite = key === 'weiß'
+  return (
+    <span
+      className={`color-swatch${isWhite ? ' is-white' : ''}`}
+      title={name}
+      aria-label={name}
+      style={{ background: hex }}
+    />
+  )
+}
+
+function ColorPair({ left, right }) {
+  const a = (left || '').trim()
+  const b = (right || '').trim()
+  if (!a && !b) return null
+  return (
+    <span className="color-pair" aria-label="Farbkombination">
+      <ColorSwatch name={a} />
+      <ColorSwatch name={b || a} />
+    </span>
+  )
+}
+
+function buildMapsNavUrl({ adresse, plz, ort, standort }) {
+  const hasGps = standort && typeof standort.lat === 'number' && typeof standort.lng === 'number'
+  const destination = hasGps
+    ? `${standort.lat},${standort.lng}`
+    : [adresse, plz, ort].filter(Boolean).join(', ')
+  if (!destination.trim()) return ''
+  return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}`
 }
 
 function useAuftraegeState() {
@@ -208,6 +265,10 @@ function AuftragListe() {
   const [auftraege, setAuftraege, loaded, fetchError, reload] = useAuftraege()
   const [form, setForm] = useState({
     termin: '',
+    verbundGroesse: '',
+    verbundFarbe: '',
+    pipesFarbe1: '',
+    pipesFarbe2: '',
     strasse: '',
     hausnummer: '',
     kontaktName: '',
@@ -328,6 +389,7 @@ function AuftragListe() {
     const hasFotos = fotos.length > 0
     const firstThumb = hasFotos ? getAttachmentSrc(fotos[0]) : null
     const terminText = (a.termin || '').trim() ? formatTermin(a.termin) : ''
+    const navUrl = buildMapsNavUrl({ adresse: a.adresse, plz: a.plz, ort: a.ort, standort: a.standort })
     return (
       <li key={a.id} className="list-item">
         <div>
@@ -337,6 +399,15 @@ function AuftragListe() {
             {a.ort ? `, ${a.ort}` : ''}
             {a.netzbetreiber ? ` · ${a.netzbetreiber}` : ''}
             {terminText ? ` · Termin: ${terminText}` : ''}
+            {navUrl ? (
+              <>
+                {' '}
+                ·{' '}
+                <a className="nav-link" href={navUrl} target="_blank" rel="noopener noreferrer">
+                  Navigation
+                </a>
+              </>
+            ) : null}
             {a.aufmassLaenge && (
               <> · Länge: {String(a.aufmassLaenge).replace('.', ',')} m</>
             )}
@@ -523,6 +594,10 @@ function AuftragListe() {
       bezeichnung,
       adresse,
       termin: (form.termin || '').trim(),
+      verbundGroesse: (form.verbundGroesse || '').trim(),
+      verbundFarbe: (form.verbundFarbe || '').trim(),
+      pipesFarbe1: (form.pipesFarbe1 || '').trim(),
+      pipesFarbe2: (form.pipesFarbe2 || '').trim(),
       strasse: form.strasse.trim(),
       hausnummer: form.hausnummer.trim(),
       kontaktName: form.kontaktName.trim(),
@@ -543,6 +618,10 @@ function AuftragListe() {
     setAuftraege((a) => [neu, ...a])
     setForm({
       termin: '',
+      verbundGroesse: '',
+      verbundFarbe: '',
+      pipesFarbe1: '',
+      pipesFarbe2: '',
       strasse: '',
       hausnummer: '',
       kontaktName: '',
@@ -669,6 +748,86 @@ function AuftragListe() {
                 value={form.termin}
                 onChange={(e) => setForm((f) => ({ ...f, termin: e.target.value }))}
               />
+            </label>
+            <label>
+              Verbund Größe
+              <select
+                value={form.verbundGroesse}
+                onChange={(e) => setForm((f) => ({ ...f, verbundGroesse: e.target.value }))}
+              >
+                <option value="">—</option>
+                <option value="22x7">22x7</option>
+                <option value="8x7">8x7</option>
+                <option value="12x7">12x7</option>
+              </select>
+            </label>
+            <label>
+              Verbund Farbe
+              <div className="select-with-swatch">
+                <select
+                  value={form.verbundFarbe}
+                  onChange={(e) => setForm((f) => ({ ...f, verbundFarbe: e.target.value }))}
+                >
+                  <option value="">—</option>
+                  <option value="Orange">Orange</option>
+                  <option value="Orange/Schwarz">Orange/Schwarz</option>
+                  <option value="Orange/Weiß">Orange/Weiß</option>
+                  <option value="Orange/Rot">Orange/Rot</option>
+                </select>
+                {form.verbundFarbe.includes('/') ? (
+                  <ColorPair left={form.verbundFarbe.split('/')[0]} right={form.verbundFarbe.split('/')[1]} />
+                ) : (
+                  <ColorSwatch name={form.verbundFarbe} />
+                )}
+              </div>
+            </label>
+            <label>
+              Pipes Farbe (Kombination)
+              <div className="pipes-row">
+                <div className="select-with-swatch">
+                  <select
+                    value={form.pipesFarbe1}
+                    onChange={(e) => setForm((f) => ({ ...f, pipesFarbe1: e.target.value }))}
+                  >
+                    <option value="">—</option>
+                    <option value="rot">rot</option>
+                    <option value="grün">grün</option>
+                    <option value="blau">blau</option>
+                    <option value="gelb">gelb</option>
+                    <option value="weiß">weiß</option>
+                    <option value="grau">grau</option>
+                    <option value="braun">braun</option>
+                    <option value="violett">violett</option>
+                    <option value="türkis">türkis</option>
+                    <option value="schwarz">schwarz</option>
+                    <option value="orange">orange</option>
+                    <option value="rosa">rosa</option>
+                  </select>
+                  <ColorSwatch name={form.pipesFarbe1} />
+                </div>
+                <div className="select-with-swatch">
+                  <select
+                    value={form.pipesFarbe2}
+                    onChange={(e) => setForm((f) => ({ ...f, pipesFarbe2: e.target.value }))}
+                  >
+                    <option value="">—</option>
+                    <option value="rot">rot</option>
+                    <option value="grün">grün</option>
+                    <option value="blau">blau</option>
+                    <option value="gelb">gelb</option>
+                    <option value="weiß">weiß</option>
+                    <option value="grau">grau</option>
+                    <option value="braun">braun</option>
+                    <option value="violett">violett</option>
+                    <option value="türkis">türkis</option>
+                    <option value="schwarz">schwarz</option>
+                    <option value="orange">orange</option>
+                    <option value="rosa">rosa</option>
+                  </select>
+                  <ColorSwatch name={form.pipesFarbe2 || form.pipesFarbe1} />
+                </div>
+                <ColorPair left={form.pipesFarbe1} right={form.pipesFarbe2 || form.pipesFarbe1} />
+              </div>
             </label>
             <label>
               Standort (GPS)
@@ -965,6 +1124,14 @@ function AuftragDetail() {
                 placeholder="Straße und Hausnummer"
               />
             </label>
+            {(() => {
+              const navUrl = buildMapsNavUrl({ adresse: auftrag.adresse, plz: auftrag.plz, ort: auftrag.ort, standort: auftrag.standort })
+              return navUrl ? (
+                <a className="btn ghost" href={navUrl} target="_blank" rel="noopener noreferrer" style={{ width: 'fit-content' }}>
+                  Navigation in Google Maps
+                </a>
+              ) : null
+            })()}
             <label>
               Termin (Datum & Uhrzeit)
               <input
