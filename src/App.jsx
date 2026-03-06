@@ -1,5 +1,5 @@
 import { Routes, Route, Link, useNavigate, useParams } from 'react-router-dom'
-import { useState, useEffect, useRef, createContext, useContext } from 'react'
+import { useState, useEffect, createContext, useContext } from 'react'
 
 const AuftraegeContext = createContext(null)
 
@@ -1191,7 +1191,6 @@ function AuftragDetail() {
   const navigate = useNavigate()
   const isNeu = id === 'neu'
   const [auftraege, setAuftraege, loaded] = useAuftraege()
-  const kameraInputRef = useRef(null)
   const [auftrag, setAuftrag] = useState(null)
   const [saveStatus, setSaveStatus] = useState('') // '' | 'gespeichert'
   const [ortsanwesenheitStatus, setOrtsanwesenheitStatus] = useState('')
@@ -1524,38 +1523,13 @@ function AuftragDetail() {
             <label>
               Fotos
               <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                <button
-                  type="button"
-                  className="btn ghost"
-                  onClick={() => kameraInputRef.current?.click()}
-                >
-                  Kamera öffnen (Foto)
-                </button>
-                <input
-                  ref={kameraInputRef}
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  multiple
-                  style={{ display: 'none' }}
-                  onChange={async (e) => {
-                    const list = Array.from(e.target.files || [])
-                    e.target.value = ''
-                    if (!list.length) return
-                    const atts = await filesToAttachments(list)
-                    if (atts?.length) setAuftrag((p) => ({
-                      ...p,
-                      dokumentationFotos: [...(p.dokumentationFotos || []), ...atts],
-                    }))
-                  }}
-                />
-                <label className="btn ghost" style={{ margin: 0 }}>
-                  Fotos hochladen
+                <div className="file-trigger-wrap">
+                  <span className="btn ghost" aria-hidden>Kamera öffnen (Foto)</span>
                   <input
                     type="file"
                     accept="image/*"
+                    capture="environment"
                     multiple
-                    style={{ display: 'none' }}
                     onChange={async (e) => {
                       const list = Array.from(e.target.files || [])
                       e.target.value = ''
@@ -1567,7 +1541,25 @@ function AuftragDetail() {
                       }))
                     }}
                   />
-                </label>
+                </div>
+                <div className="file-trigger-wrap">
+                  <span className="btn ghost" aria-hidden>Fotos hochladen</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={async (e) => {
+                      const list = Array.from(e.target.files || [])
+                      e.target.value = ''
+                      if (!list.length) return
+                      const atts = await filesToAttachments(list)
+                      if (atts?.length) setAuftrag((p) => ({
+                        ...p,
+                        dokumentationFotos: [...(p.dokumentationFotos || []), ...atts],
+                      }))
+                    }}
+                  />
+                </div>
                 <span className="muted" style={{ fontSize: '0.9rem' }}>
                   Fotos gespeichert: {(auftrag.dokumentationFotos || []).length}
                 </span>
