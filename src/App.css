@@ -131,6 +131,27 @@ textarea {
   min-height: 80px;
   resize: vertical;
 }
+.input-with-action {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-top: 0.35rem;
+}
+.input-with-action input {
+  flex: 1;
+  margin-top: 0;
+  min-width: 0;
+}
+.input-with-action .btn {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.field-hint {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 0.8rem;
+  color: #64748b;
+}
 /* Mobile: größere Touch-Ziele für Buttons in Formularen */
 @media (max-width: 640px) {
   input, textarea, select {

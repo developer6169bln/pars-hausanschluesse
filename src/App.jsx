@@ -195,6 +195,15 @@ function ColorPair({ left, right }) {
   )
 }
 
+// Google Drive: Ordner öffnen, Nutzer kopiert Link aus Adresszeile und fügt hier ein.
+const GOOGLE_DRIVE_MY_DRIVE_URL = 'https://drive.google.com/drive/my-drive'
+/** Such-URL für Drive: Ordner vorschlagen, die mit der NVT-Nummer enden bzw. sie enthalten. */
+function getGoogleDriveSearchUrl(nvtValue) {
+  const q = (nvtValue && String(nvtValue).trim()) || ''
+  if (!q) return ''
+  return `https://drive.google.com/drive/search?q=${encodeURIComponent(q)}`
+}
+
 // Geolocation: Nur über HTTPS (Ausnahme localhost). iOS: Standort nur nach User-Interaktion (Button-Klick).
 const GEO_OPTIONS = { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 }
 const GEO_ERROR_HINT = 'Standort erfordert HTTPS (außer localhost). iOS: nur nach Tippen auf den Button; bei Ablehnung: Einstellungen → Datenschutz → Standort prüfen.'
@@ -1003,12 +1012,39 @@ function AuftragListe() {
             </label>
             <label>
               Übersichtsplan Download-Link
-              <input
-                type="url"
-                value={form.uebersichtsplanDownloadUrl}
-                onChange={(e) => setForm((f) => ({ ...f, uebersichtsplanDownloadUrl: e.target.value }))}
-                placeholder="https://…"
-              />
+              <div className="input-with-action">
+                <input
+                  type="url"
+                  value={form.uebersichtsplanDownloadUrl}
+                  onChange={(e) => setForm((f) => ({ ...f, uebersichtsplanDownloadUrl: e.target.value }))}
+                  placeholder="https://drive.google.com/drive/folders/…"
+                />
+                <button
+                  type="button"
+                  className="btn ghost"
+                  onClick={() => {
+                    window.open(GOOGLE_DRIVE_MY_DRIVE_URL, '_blank', 'noopener')
+                  }}
+                  title="Google Drive öffnen, Zielordner anwählen, Link aus Adresszeile kopieren und hier einfügen"
+                >
+                  Drive öffnen
+                </button>
+                {getGoogleDriveSearchUrl(form.nvt) && (
+                  <button
+                    type="button"
+                    className="btn ghost"
+                    onClick={() => {
+                      window.open(getGoogleDriveSearchUrl(form.nvt), '_blank', 'noopener')
+                    }}
+                    title={`In Google Drive nach „${(form.nvt || '').trim()}“ suchen (z. B. Ordner, der mit der NVT-Nummer endet)`}
+                  >
+                    Nach NVT in Drive suchen
+                  </button>
+                )}
+              </div>
+              <span className="field-hint">
+                Drive öffnen oder nach NVT-Nummer suchen (Ordner, der mit der NVT endet). Link aus der Adresszeile hier einfügen.
+              </span>
             </label>
             <label>
               GEO ACE Messung
@@ -1372,12 +1408,39 @@ function AuftragDetail() {
             </label>
             <label>
               Übersichtsplan Download-Link
-              <input
-                type="url"
-                value={auftrag.uebersichtsplanDownloadUrl ?? ''}
-                onChange={(e) => setAuftrag((p) => ({ ...p, uebersichtsplanDownloadUrl: e.target.value }))}
-                placeholder="https://…"
-              />
+              <div className="input-with-action">
+                <input
+                  type="url"
+                  value={auftrag.uebersichtsplanDownloadUrl ?? ''}
+                  onChange={(e) => setAuftrag((p) => ({ ...p, uebersichtsplanDownloadUrl: e.target.value }))}
+                  placeholder="https://drive.google.com/drive/folders/…"
+                />
+                <button
+                  type="button"
+                  className="btn ghost"
+                  onClick={() => {
+                    window.open(GOOGLE_DRIVE_MY_DRIVE_URL, '_blank', 'noopener')
+                  }}
+                  title="Google Drive öffnen, Zielordner anwählen, Link aus Adresszeile kopieren und hier einfügen"
+                >
+                  Drive öffnen
+                </button>
+                {getGoogleDriveSearchUrl(auftrag.nvt) && (
+                  <button
+                    type="button"
+                    className="btn ghost"
+                    onClick={() => {
+                      window.open(getGoogleDriveSearchUrl(auftrag.nvt), '_blank', 'noopener')
+                    }}
+                    title={`In Google Drive nach „${(auftrag.nvt || '').trim()}“ suchen (z. B. Ordner, der mit der NVT-Nummer endet)`}
+                  >
+                    Nach NVT in Drive suchen
+                  </button>
+                )}
+              </div>
+              <span className="field-hint">
+                Drive öffnen oder nach NVT-Nummer suchen (Ordner, der mit der NVT endet). Link aus der Adresszeile hier einfügen.
+              </span>
             </label>
           </div>
           {(auftrag.uebersichtsplanDownloadUrl || '').trim() && (
