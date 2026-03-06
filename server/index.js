@@ -73,6 +73,11 @@ app.use((_req, res, next) => {
 
 app.use('/uploads', express.static(UPLOAD_DIR))
 
+// Health-Check für Railway (schnelle 200-Antwort)
+app.get('/api/health', (_req, res) => {
+  res.status(200).json({ ok: true })
+})
+
 app.get('/api/auftraege', (_req, res) => {
   res.json(readAuftraege())
 })
@@ -125,7 +130,10 @@ const DIST = path.join(__dirname, '..', 'dist')
 if (fs.existsSync(DIST)) {
   app.use(express.static(DIST))
   app.get('*', (_req, res) => {
-    res.sendFile(path.join(DIST, 'index.html'))
+    const indexPath = path.join(DIST, 'index.html')
+    res.sendFile(indexPath, (err) => {
+      if (err && !res.headersSent) res.status(500).json({ error: 'Frontend nicht gefunden' })
+    })
   })
 }
 

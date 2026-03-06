@@ -20,7 +20,7 @@ So hostest du den Auftragspool-Server bei Railway (kostenlos nutzbar). Danach br
   - **Start Command:** `npm run start` (startet den Server, der API + Frontend ausliefert)
   - **Watch Paths:** leer
 
-Die Datei `railway.json` setzt den Build-Befehl bereits. Falls die Startseite weiterhin 404 zeigt, unter **Settings → Build** prüfen, ob **Build Command** = `npm run build` ist.
+Die Datei `railway.json` setzt den Build-Befehl und **Start Command** = `node server/index.js` (direkt ohne npm, damit der Container stabil läuft). Unter **Settings → Build** prüfen: **Build Command** = `npm run build`, **Start Command** = `node server/index.js`. Optional unter **Settings → Deploy** einen **Health Check** mit Pfad `/api/health` einrichten.
 
 Railway nutzt automatisch die Variable **PORT** – der Server verwendet sie bereits.
 
