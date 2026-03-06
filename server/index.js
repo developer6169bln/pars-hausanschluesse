@@ -5,14 +5,19 @@ import fs from 'fs'
 import { fileURLToPath } from 'url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const UPLOAD_DIR = path.join(__dirname, 'uploads')
-const AUFTRAEGE_FILE = path.join(__dirname, 'auftraege.json')
 const PORT = process.env.PORT || 3010
 const API_BASE = process.env.API_BASE || `http://localhost:${PORT}`
+
+// Persistente Daten: Wenn DATA_DIR gesetzt (z. B. Railway-Volume unter /data), speichern wir dort.
+// So gehen Aufträge und Uploads bei Redeploy nicht verloren.
+const DATA_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : __dirname
+const UPLOAD_DIR = path.join(DATA_DIR, 'uploads')
+const AUFTRAEGE_FILE = path.join(DATA_DIR, 'auftraege.json')
 
 if (!fs.existsSync(UPLOAD_DIR)) {
   fs.mkdirSync(UPLOAD_DIR, { recursive: true })
 }
+console.log('Datenverzeichnis:', DATA_DIR, DATA_DIR !== __dirname ? '(persistent)' : '(lokal)')
 
 function readAuftraege() {
   try {

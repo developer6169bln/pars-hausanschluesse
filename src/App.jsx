@@ -115,6 +115,7 @@ const defaultAuftrag = {
   nvt: '',
   nvtStandort: '',
   standort: null, // { lat, lng, accuracy, timestamp }
+  ortsanwesenheit: null, // { lat, lng, accuracy?, timestamp } – Standort + Uhrzeit per Klick
   geoAceMessung: 'nein',
   geprueft: 'nein',
   messungGraben: '',
@@ -194,6 +195,10 @@ function ColorPair({ left, right }) {
   )
 }
 
+// Geolocation: Nur über HTTPS (Ausnahme localhost). iOS: Standort nur nach User-Interaktion (Button-Klick).
+const GEO_OPTIONS = { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 }
+const GEO_ERROR_HINT = 'Standort erfordert HTTPS (außer localhost). iOS: nur nach Tippen auf den Button; bei Ablehnung: Einstellungen → Datenschutz → Standort prüfen.'
+
 function buildMapsNavUrl({ adresse, plz, ort, standort }) {
   const hasGps = standort && typeof standort.lat === 'number' && typeof standort.lng === 'number'
   const destination = hasGps
@@ -201,6 +206,17 @@ function buildMapsNavUrl({ adresse, plz, ort, standort }) {
     : [adresse, plz, ort].filter(Boolean).join(', ')
   if (!destination.trim()) return ''
   return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}`
+}
+
+function formatOrtsanwesenheit(o) {
+  if (!o || (o.timestamp == null && o.lat == null)) return ''
+  const ts = o.timestamp != null ? o.timestamp : (o.lat != null ? Date.now() : null)
+  if (ts == null) return ''
+  const dateStr = new Date(ts).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })
+  if (typeof o.lat === 'number' && typeof o.lng === 'number') {
+    return `${dateStr} (${o.lat.toFixed(5)}, ${o.lng.toFixed(5)})`
+  }
+  return dateStr
 }
 
 function useAuftraegeState() {
@@ -276,6 +292,7 @@ function AuftragListe() {
     nvt: '',
     nvtStandort: '',
     standort: null,
+    ortsanwesenheit: null,
     plz: '',
     ort: '',
     dokumentationFotos: [],
@@ -288,6 +305,7 @@ function AuftragListe() {
   })
   const [importVorschau, setImportVorschau] = useState([])
   const [standortStatus, setStandortStatus] = useState('') // '' | 'loading' | 'ok' | 'error'
+  const [ortsanwesenheitStatus, setOrtsanwesenheitStatus] = useState('') // '' | 'loading' | 'ok' | 'error'
 
   const standortSpeichern = async () => {
     if (!('geolocation' in navigator)) {
@@ -297,11 +315,7 @@ function AuftragListe() {
     setStandortStatus('loading')
     try {
       const pos = await new Promise((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
-          enableHighAccuracy: true,
-          timeout: 30000,
-          maximumAge: 0,
-        })
+        navigator.geolocation.getCurrentPosition(resolve, reject, GEO_OPTIONS)
       })
       const standort = {
         lat: pos.coords.latitude,
@@ -315,6 +329,31 @@ function AuftragListe() {
     } catch (err) {
       setStandortStatus('error')
       console.warn('Standort fehlgeschlagen', err)
+    }
+  }
+
+  const ortsanwesenheitErfassen = async () => {
+    if (!('geolocation' in navigator)) {
+      setOrtsanwesenheitStatus('error')
+      return
+    }
+    setOrtsanwesenheitStatus('loading')
+    try {
+      const pos = await new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, GEO_OPTIONS)
+      })
+      const ortsanwesenheit = {
+        lat: pos.coords.latitude,
+        lng: pos.coords.longitude,
+        accuracy: pos.coords.accuracy ?? 0,
+        timestamp: Date.now(),
+      }
+      setForm((f) => ({ ...f, ortsanwesenheit }))
+      setOrtsanwesenheitStatus('ok')
+      setTimeout(() => setOrtsanwesenheitStatus(''), 3000)
+    } catch (err) {
+      setOrtsanwesenheitStatus('error')
+      console.warn('Ortsanwesenheit fehlgeschlagen', err)
     }
   }
 
@@ -683,6 +722,7 @@ function AuftragListe() {
       nvt: form.nvt.trim(),
       nvtStandort: form.nvtStandort.trim(),
       standort: form.standort,
+      ortsanwesenheit: form.ortsanwesenheit,
       plz: form.plz.trim(),
       ort: form.ort.trim(),
       geoAceMessung: form.geoAceMessung,
@@ -707,6 +747,7 @@ function AuftragListe() {
       nvt: '',
       nvtStandort: '',
       standort: null,
+      ortsanwesenheit: null,
       plz: '',
       ort: '',
       dokumentationFotos: [],
@@ -925,13 +966,32 @@ function AuftragListe() {
                 </span>
                 {standortStatus === 'ok' && <span className="standort-ok">Standort übernommen.</span>}
                 {standortStatus === 'error' && (
-                  <span className="standort-error">
-                    Standort fehlgeschlagen. iPhone: Einstellungen → Datenschutz → Standort prüfen; „Standort zulassen“ beim ersten Klick tippen. Seite ggf. über HTTPS öffnen.
-                  </span>
+                  <span className="standort-error">{GEO_ERROR_HINT}</span>
                 )}
               </div>
               <p className="muted" style={{ marginTop: '0.35rem', fontSize: '0.8rem' }}>
-                Beim ersten Klick wird die Standortberechtigung angefragt (iPhone: „Standort zulassen“ tippen).
+                Beim ersten Klick fragt der Browser nach der Standortberechtigung. iOS: nur nach Tippen auf den Button; Seite über HTTPS aufrufen (localhost geht auch).
+              </p>
+            </label>
+            <label>
+              Ortsanwesenheit (Standort + Uhrzeit)
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
+                <button
+                  className="btn ghost"
+                  type="button"
+                  onClick={ortsanwesenheitErfassen}
+                  disabled={!('geolocation' in navigator) || ortsanwesenheitStatus === 'loading'}
+                >
+                  {ortsanwesenheitStatus === 'loading' ? 'Wird erfasst…' : 'Ortsanwesenheit jetzt erfassen'}
+                </button>
+                <span className="muted" style={{ fontSize: '0.9rem' }}>
+                  {form.ortsanwesenheit ? formatOrtsanwesenheit(form.ortsanwesenheit) : '—'}
+                </span>
+                {ortsanwesenheitStatus === 'ok' && <span className="standort-ok">Erfasst.</span>}
+                {ortsanwesenheitStatus === 'error' && <span className="standort-error">{GEO_ERROR_HINT}</span>}
+              </div>
+              <p className="muted" style={{ marginTop: '0.35rem', fontSize: '0.8rem' }}>
+                Wie Standort: Berechtigung beim ersten Klick; iOS nur nach Tippen; HTTPS nötig (außer localhost).
               </p>
             </label>
             <label>
@@ -1093,6 +1153,34 @@ function AuftragDetail() {
   const kameraInputRef = useRef(null)
   const [auftrag, setAuftrag] = useState(null)
   const [saveStatus, setSaveStatus] = useState('') // '' | 'gespeichert'
+  const [ortsanwesenheitStatus, setOrtsanwesenheitStatus] = useState('')
+
+  const ortsanwesenheitErfassen = async () => {
+    if (!('geolocation' in navigator)) {
+      setOrtsanwesenheitStatus('error')
+      return
+    }
+    setOrtsanwesenheitStatus('loading')
+    try {
+      const pos = await new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, GEO_OPTIONS)
+      })
+      setAuftrag((p) => ({
+        ...p,
+        ortsanwesenheit: {
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          accuracy: pos.coords.accuracy ?? 0,
+          timestamp: Date.now(),
+        },
+      }))
+      setOrtsanwesenheitStatus('ok')
+      setTimeout(() => setOrtsanwesenheitStatus(''), 3000)
+    } catch (err) {
+      setOrtsanwesenheitStatus('error')
+      console.warn('Ortsanwesenheit fehlgeschlagen', err)
+    }
+  }
 
   useEffect(() => {
     if (!loaded) return
@@ -1213,6 +1301,27 @@ function AuftragDetail() {
                 value={auftrag.termin ?? ''}
                 onChange={(e) => setAuftrag((p) => ({ ...p, termin: e.target.value }))}
               />
+            </label>
+            <label>
+              Ortsanwesenheit (Standort + Uhrzeit)
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
+                <button
+                  className="btn ghost"
+                  type="button"
+                  onClick={ortsanwesenheitErfassen}
+                  disabled={!('geolocation' in navigator) || ortsanwesenheitStatus === 'loading'}
+                >
+                  {ortsanwesenheitStatus === 'loading' ? 'Wird erfasst…' : 'Ortsanwesenheit jetzt erfassen'}
+                </button>
+                <span className="muted" style={{ fontSize: '0.9rem' }}>
+                  {auftrag.ortsanwesenheit ? formatOrtsanwesenheit(auftrag.ortsanwesenheit) : '—'}
+                </span>
+                {ortsanwesenheitStatus === 'ok' && <span className="standort-ok">Erfasst.</span>}
+                {ortsanwesenheitStatus === 'error' && <span className="standort-error">{GEO_ERROR_HINT}</span>}
+              </div>
+              <p className="muted" style={{ marginTop: '0.35rem', fontSize: '0.8rem' }}>
+                Beim ersten Klick fragt der Browser nach der Standortberechtigung. iOS: nur nach Tippen; Seite über HTTPS (localhost geht auch).
+              </p>
             </label>
             <label>
               PLZ
@@ -1485,11 +1594,17 @@ function buildProtokollText(a) {
   const lines = [
     `Abschlussprotokoll – ${a.bezeichnung || 'Auftrag'}`,
     '',
+    `Bezeichnung: ${a.bezeichnung || '—'}`,
     `Adresse: ${[a.adresse, a.plz, a.ort].filter(Boolean).join(', ') || '—'}`,
+    a.nvt ? `NVT: ${a.nvt}` : null,
     a.termin ? `Termin: ${a.termin}` : null,
-    a.verbundFarbe ? `Verbund: ${a.verbundFarbe}` : null,
-    (a.pipesFarbe1 || a.pipesFarbe2) ? `Pipes: ${a.pipesFarbe1 || '—'} / ${a.pipesFarbe2 || a.pipesFarbe1 || '—'}` : null,
-    a.kontaktName || a.telefon ? `Kontakt: ${[a.kontaktName, a.telefon].filter(Boolean).join(', ') || '—'}` : null,
+    a.verbundGroesse ? `Verbund Größe: ${a.verbundGroesse}` : null,
+    a.verbundFarbe ? `Verbund Farbe: ${a.verbundFarbe}` : null,
+    (a.pipesFarbe1 || a.pipesFarbe2) ? `Pipes Farbe: ${a.pipesFarbe1 || '—'} / ${a.pipesFarbe2 || a.pipesFarbe1 || '—'}` : null,
+    a.kontaktName ? `Kontakt: ${a.kontaktName}` : null,
+    a.telefon ? `Telefon: ${a.telefon}` : null,
+    a.nvtStandort ? `NVT Standort: ${a.nvtStandort}` : null,
+    a.ortsanwesenheit ? `Ortsanwesenheit: ${formatOrtsanwesenheit(a.ortsanwesenheit)}` : null,
     a.notizen ? `Notizen: ${a.notizen}` : null,
   ].filter(Boolean)
   return lines.join('\n')
@@ -1540,13 +1655,15 @@ function Abschlussprotokoll() {
           <dl className="protokoll-dl">
             <dt>Bezeichnung</dt><dd>{auftrag.bezeichnung || '—'}</dd>
             <dt>Adresse</dt><dd>{[auftrag.adresse, auftrag.plz, auftrag.ort].filter(Boolean).join(', ') || '—'}</dd>
+            <dt>NVT</dt><dd>{auftrag.nvt || '—'}</dd>
             <dt>Termin</dt><dd>{auftrag.termin ? new Date(auftrag.termin).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' }) : '—'}</dd>
             <dt>Verbund Größe</dt><dd>{auftrag.verbundGroesse || '—'}</dd>
             <dt>Verbund Farbe</dt><dd>{auftrag.verbundFarbe || '—'}</dd>
             <dt>Pipes Farbe</dt><dd>{(auftrag.pipesFarbe1 || auftrag.pipesFarbe2) ? `${auftrag.pipesFarbe1 || '—'} / ${auftrag.pipesFarbe2 || auftrag.pipesFarbe1 || '—'}` : '—'}</dd>
             <dt>Kontakt</dt><dd>{auftrag.kontaktName || '—'}</dd>
             <dt>Telefon</dt><dd>{auftrag.telefon || '—'}</dd>
-            <dt>NVT / Standort</dt><dd>{[auftrag.nvt, auftrag.nvtStandort].filter(Boolean).join(' – ') || '—'}</dd>
+            <dt>NVT Standort</dt><dd>{auftrag.nvtStandort || '—'}</dd>
+            <dt>Ortsanwesenheit (mit Uhrzeit)</dt><dd>{auftrag.ortsanwesenheit ? formatOrtsanwesenheit(auftrag.ortsanwesenheit) : '—'}</dd>
             {auftrag.notizen ? (<><dt>Notizen</dt><dd>{auftrag.notizen}</dd></>) : null}
           </dl>
         </section>

@@ -50,10 +50,31 @@ Die **Web-App** (Vite) muss die API-URL der Railway-Instanz kennen:
 
 Wenn du auch das Frontend auf Railway (oder z.B. Vercel/Netlify) deployst, dort **VITE_API_URL** auf die gleiche Railway-Server-URL setzen.
 
-## 6. Kurz-Check
+## 6. **Wichtig: Aufträge dauerhaft speichern (kein Datenverlust bei Redeploy)**
 
-- Railway-Service läuft (Logs: „Upload-Server: …“).
+Ohne persistenten Speicher gehen **alle Aufträge und hochgeladenen Dateien bei jedem Redeploy verloren**. Damit die Daten bleiben:
+
+1. **Volume hinzufügen**
+   - Im Railway-Dashboard: deinen Service öffnen → **Settings** → **Volumes**
+   - **Add Volume** → Mount Path: `/data` (oder z.B. `data`)
+   - Volume wird bei Redeploy beibehalten.
+
+2. **Umgebungsvariable setzen**
+   - Unter **Variables** eine neue Variable anlegen:
+   - **Name:** `DATA_DIR`
+   - **Wert:** `/data` (exakt der Mount Path aus Schritt 1)
+
+3. **Service neu starten** (Redeploy), damit der Server das Volume nutzt.
+
+Danach speichert der Server `auftraege.json` und den Ordner `uploads/` unter `/data` – diese Daten bleiben bei weiteren Deploys erhalten. In den Logs siehst du: `Datenverzeichnis: /data (persistent)`.
+
+**Hinweis:** Aufträge, die vor dem Einrichten des Volumes angelegt wurden, sind nach einem Redeploy leider weg. Ab jetzt gehen keine Daten mehr verloren, wenn du das Volume wie oben einrichtest.
+
+## 7. Kurz-Check
+
+- Railway-Service läuft (Logs: „Upload-Server: …“, „Datenverzeichnis: …“).
 - `API_BASE` ist auf die öffentliche Railway-URL gesetzt.
+- **Optional:** `DATA_DIR` und Volume gesetzt → Aufträge bleiben bei Redeploy erhalten.
 - Frontend wurde mit dieser URL als `VITE_API_URL` gebaut bzw. gestartet.
 
 Dann können alle die gleiche Auftragspool-URL nutzen, ohne lokal `npm run server` zu starten.
