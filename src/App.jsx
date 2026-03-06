@@ -261,7 +261,11 @@ function useAuftraegeState() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(auftraege),
-    }).catch(() => {})
+    })
+      .then((r) => {
+        if (!r.ok) throw new Error('Speichern fehlgeschlagen (Server ' + r.status + ')')
+      })
+      .catch((e) => console.error('Aufträge speichern:', e.message))
   }, [auftraege, loaded])
   return [auftraege, setAuftraege, loaded, fetchError, reload]
 }

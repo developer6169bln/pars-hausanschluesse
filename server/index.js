@@ -14,22 +14,41 @@ const DATA_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : __d
 const UPLOAD_DIR = path.join(DATA_DIR, 'uploads')
 const AUFTRAEGE_FILE = path.join(DATA_DIR, 'auftraege.json')
 
-if (!fs.existsSync(UPLOAD_DIR)) {
-  fs.mkdirSync(UPLOAD_DIR, { recursive: true })
+// DATA_DIR und Upload-Ordner anlegen (wichtig für Volume: muss existieren)
+try {
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true })
+    console.log('DATA_DIR erstellt:', DATA_DIR)
+  }
+  if (!fs.existsSync(UPLOAD_DIR)) {
+    fs.mkdirSync(UPLOAD_DIR, { recursive: true })
+    console.log('UPLOAD_DIR erstellt:', UPLOAD_DIR)
+  }
+} catch (err) {
+  console.error('Fehler beim Anlegen der Verzeichnisse:', err.message)
 }
-console.log('Datenverzeichnis:', DATA_DIR, DATA_DIR !== __dirname ? '(persistent)' : '(lokal)')
+
+const dataDirIsVolume = Boolean(process.env.DATA_DIR)
+console.log('Datenverzeichnis:', DATA_DIR, dataDirIsVolume ? '(persistent, DATA_DIR gesetzt)' : '(lokal)')
+console.log('Aufträge-Datei:', AUFTRAEGE_FILE)
 
 function readAuftraege() {
   try {
     const raw = fs.readFileSync(AUFTRAEGE_FILE, 'utf8')
     return JSON.parse(raw)
-  } catch {
+  } catch (err) {
+    if (err.code !== 'ENOENT') console.error('Lesefehler auftraege.json:', err.message)
     return []
   }
 }
 
 function writeAuftraege(list) {
-  fs.writeFileSync(AUFTRAEGE_FILE, JSON.stringify(list), 'utf8')
+  try {
+    fs.writeFileSync(AUFTRAEGE_FILE, JSON.stringify(list), 'utf8')
+  } catch (err) {
+    console.error('Schreibfehler auftraege.json:', err.message, 'Pfad:', AUFTRAEGE_FILE)
+    throw err
+  }
 }
 
 const storage = multer.diskStorage({
@@ -58,16 +77,39 @@ app.get('/api/auftraege', (_req, res) => {
   res.json(readAuftraege())
 })
 
+// Debug: prüfen, ob DATA_DIR/Volume genutzt wird und Datei existiert (z. B. /api/debug aufrufen)
+app.get('/api/debug', (_req, res) => {
+  const list = readAuftraege()
+  res.json({
+    dataDir: DATA_DIR,
+    auftraegeFile: AUFTRAEGE_FILE,
+    auftraegeFileExists: fs.existsSync(AUFTRAEGE_FILE),
+    uploadDirExists: fs.existsSync(UPLOAD_DIR),
+    dataDirFromEnv: Boolean(process.env.DATA_DIR),
+    count: Array.isArray(list) ? list.length : 0,
+  })
+})
+
 app.post('/api/auftraege', (req, res) => {
   const list = Array.isArray(req.body) ? req.body : []
-  writeAuftraege(list)
-  res.json(list)
+  try {
+    writeAuftraege(list)
+    res.json(list)
+  } catch (err) {
+    console.error('POST /api/auftraege Fehler:', err.message)
+    res.status(500).json({ error: 'Speichern fehlgeschlagen', details: err.message })
+  }
 })
 
 app.put('/api/auftraege', (req, res) => {
   const list = Array.isArray(req.body) ? req.body : []
-  writeAuftraege(list)
-  res.json(list)
+  try {
+    writeAuftraege(list)
+    res.json(list)
+  } catch (err) {
+    console.error('PUT /api/auftraege Fehler:', err.message)
+    res.status(500).json({ error: 'Speichern fehlgeschlagen', details: err.message })
+  }
 })
 
 app.post('/api/upload', upload.single('file'), (req, res) => {

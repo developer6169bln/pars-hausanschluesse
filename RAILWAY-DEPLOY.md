@@ -70,6 +70,9 @@ Danach speichert der Server `auftraege.json` und den Ordner `uploads/` unter `/d
 
 **Hinweis:** Aufträge, die vor dem Einrichten des Volumes angelegt wurden, sind nach einem Redeploy leider weg. Ab jetzt gehen keine Daten mehr verloren, wenn du das Volume wie oben einrichtest.
 
+**Prüfen, ob es funktioniert:** Nach Redeploy im Browser aufrufen: `https://deine-app.up.railway.app/api/debug`  
+Dort siehst du: `dataDir` (sollte `/data` sein), `dataDirFromEnv: true`, `auftraegeFileExists`. Wenn beim Speichern etwas schiefgeht, liefert der Server Fehlermeldungen; in den Railway-Logs unter **Deployments → View Logs** erscheinen dann z. B. Schreibfehler.
+
 ## 7. Kurz-Check
 
 - Railway-Service läuft (Logs: „Upload-Server: …“, „Datenverzeichnis: …“).
