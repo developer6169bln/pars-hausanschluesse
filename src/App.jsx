@@ -73,9 +73,10 @@ async function reverseGeocodeNominatim(lat, lon) {
   return { street, house, raw: data }
 }
 
-function drawOverlay(ctx, canvasW, canvasH, { street, house, tsLabel }) {
+function drawOverlay(ctx, canvasW, canvasH, { street, house, nvt, tsLabel }) {
   const addressLine = [street, house].filter(Boolean).join(' ').trim()
-  const lines = [addressLine || 'Adresse: —', tsLabel || '']
+  const nvtLine = (nvt || '').toString().trim() ? `NVT: ${(nvt || '').toString().trim()}` : ''
+  const lines = [addressLine || 'Adresse: —', nvtLine, tsLabel || ''].filter(Boolean)
   const pad = Math.max(12, Math.round(canvasW * 0.02))
   const fontSize = Math.max(18, Math.round(canvasW * 0.03))
   const lineHeight = Math.round(fontSize * 1.25)
@@ -1612,7 +1613,8 @@ function AuftragDetail() {
     if (!ctx) return
 
     const tsLabel = new Date().toLocaleString('de-DE')
-    drawOverlay(ctx, canvas.width, canvas.height, { street, house, tsLabel })
+    const nvt = (auftrag?.nvt || '').toString().trim()
+    drawOverlay(ctx, canvas.width, canvas.height, { street, house, nvt, tsLabel })
 
     try {
       const annotatedFile = await canvasToJpegFile(canvas, 'hausanschluss', 0.9)
@@ -1620,6 +1622,7 @@ function AuftragDetail() {
         capturedAt: Date.now(),
         street,
         house,
+        nvt,
         lat: kameraFlow.lat,
         lng: kameraFlow.lng,
         accuracy: kameraFlow.accuracy,
