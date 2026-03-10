@@ -1549,6 +1549,11 @@ function AuftragDetail() {
       street: '',
       house: '',
     }))
+    await requestKameraStandort()
+  }
+
+  const requestKameraStandort = async () => {
+    setKameraFlow((p) => ({ ...p, loading: true, error: '' }))
     let pos = null
     try {
       pos = await new Promise((resolve, reject) => {
@@ -1575,7 +1580,7 @@ function AuftragDetail() {
         error = 'Adresse konnte nicht automatisch ermittelt werden. Bitte manuell prüfen.'
       }
     } else {
-      error = 'GPS konnte nicht ermittelt werden. Bitte Adresse manuell prüfen.'
+      error = 'Standort nicht verfügbar. Bitte „Standort freigeben“ tippen oder Adresse manuell prüfen.'
     }
 
     setKameraFlow((p) => ({
@@ -1585,8 +1590,8 @@ function AuftragDetail() {
       lat,
       lng,
       accuracy,
-      street,
-      house,
+      street: street || p.street,
+      house: house || p.house,
     }))
   }
 
@@ -2164,6 +2169,17 @@ function AuftragDetail() {
                   <div className="modal-hints">
                     {!!kameraFlow.accuracy && <p className="muted" style={{ margin: 0 }}>{formatAccuracyHint(kameraFlow.accuracy)}</p>}
                     {!!kameraFlow.error && <p className="foto-upload-hinweis" style={{ marginTop: '0.5rem' }}>{kameraFlow.error}</p>}
+                    {kameraFlow.lat == null && (typeof window !== 'undefined') && (window.location?.protocol !== 'https:' && window.location?.hostname !== 'localhost') && (
+                      <p className="foto-upload-hinweis" style={{ marginTop: '0.5rem' }}>
+                        Standort benötigt HTTPS (außer localhost). Öffne die App über https://, dann erneut „Standort freigeben“.
+                      </p>
+                    )}
+                    {kameraFlow.lat == null && (
+                      <p className="muted" style={{ marginTop: '0.35rem' }}>
+                        iPhone: Einstellungen → Datenschutz &amp; Sicherheit → Ortungsdienste → Browser (Safari/Chrome) → „Beim Verwenden“.{' '}
+                        Android: Einstellungen → Apps → Browser → Berechtigungen → Standort erlauben.
+                      </p>
+                    )}
                     {kameraFlow.accuracy != null && Number(kameraFlow.accuracy) > 30 && (
                       <p className="foto-upload-hinweis" style={{ marginTop: '0.5rem' }}>
                         GPS ungenau – Adresse bitte besonders sorgfältig prüfen.
@@ -2195,6 +2211,11 @@ function AuftragDetail() {
                   <button type="button" className="btn ghost" onClick={closeKameraFlow} disabled={kameraFlow.loading}>
                     Neu erfassen
                   </button>
+                  {kameraFlow.lat == null && (
+                    <button type="button" className="btn ghost" onClick={requestKameraStandort} disabled={kameraFlow.loading}>
+                      Standort freigeben
+                    </button>
+                  )}
                   <button type="button" className="btn primary" onClick={speichernKameraFoto} disabled={kameraFlow.loading}>
                     {kameraFlow.loading ? 'Laden…' : 'Speichern'}
                   </button>
