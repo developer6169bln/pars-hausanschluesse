@@ -21,6 +21,32 @@ function getAttachmentSrc(item) {
   return item?.url || item?.dataUrl || ''
 }
 
+function getUploadFilenameFromUrl(url) {
+  try {
+    const u = new URL(url, window.location.origin)
+    const parts = (u.pathname || '').split('/').filter(Boolean)
+    const filename = parts[parts.length - 1] || ''
+    return filename
+  } catch {
+    const s = String(url || '')
+    const parts = s.split('?')[0].split('/').filter(Boolean)
+    return parts[parts.length - 1] || ''
+  }
+}
+
+async function deleteUploadOnServer(attachment) {
+  if (!API_BASE) return { ok: false, skipped: true }
+  const url = attachment?.url
+  if (!url || typeof url !== 'string') return { ok: false, skipped: true }
+  const filename = getUploadFilenameFromUrl(url)
+  if (!filename) return { ok: false, skipped: true }
+  const res = await fetch(`${API_BASE}/api/upload/${encodeURIComponent(filename)}`, { method: 'DELETE' })
+  if (res.ok) return { ok: true }
+  if (res.status === 404) return { ok: true, notFound: true }
+  const msg = await res.text().catch(() => '')
+  return { ok: false, status: res.status, message: msg }
+}
+
 async function uploadOneToServer(file) {
   const formData = new FormData()
   formData.append('file', file)
@@ -501,6 +527,32 @@ function AuftragListe() {
   const [standortStatus, setStandortStatus] = useState('') // '' | 'loading' | 'ok' | 'error'
   const [ortsanwesenheitStatus, setOrtsanwesenheitStatus] = useState('') // '' | 'loading' | 'ok' | 'error'
   const [formFotoHinweis, setFormFotoHinweis] = useState('')
+  const [formFotoViewer, setFormFotoViewer] = useState({ open: false, fotos: [], currentIndex: 0 })
+  const openFormFotos = (fotos, idx = 0) => {
+    if (!fotos?.length) return
+    setFormFotoViewer({ open: true, fotos, currentIndex: Math.max(0, Math.min(idx, fotos.length - 1)) })
+  }
+  const closeFormFotos = () => setFormFotoViewer((v) => ({ ...v, open: false }))
+  const nextFormFoto = () =>
+    setFormFotoViewer((v) => ({ ...v, currentIndex: (v.currentIndex + 1) % v.fotos.length }))
+  const prevFormFoto = () =>
+    setFormFotoViewer((v) => ({ ...v, currentIndex: (v.currentIndex - 1 + v.fotos.length) % v.fotos.length }))
+  const removeFormFoto = async (idx) => {
+    const att = (form.dokumentationFotos || [])[idx]
+    if (att?.url) {
+      const result = await deleteUploadOnServer(att)
+      if (!result.ok && !result.skipped) {
+        alert('Server-Foto konnte nicht gelöscht werden.')
+        return
+      }
+    }
+    setForm((f) => {
+      const list = Array.isArray(f.dokumentationFotos) ? [...f.dokumentationFotos] : []
+      if (idx < 0 || idx >= list.length) return f
+      list.splice(idx, 1)
+      return { ...f, dokumentationFotos: list }
+    })
+  }
 
   const standortSpeichern = async () => {
     if (!('geolocation' in navigator)) {
@@ -1193,6 +1245,33 @@ function AuftragListe() {
               />
               <span className="field-hint">Fotos werden mit dem neuen Auftrag übernommen. Nicht vergessen, den Auftrag anzulegen.</span>
               {formFotoHinweis && <span className="foto-upload-hinweis" role="status">{formFotoHinweis}</span>}
+              {(form.dokumentationFotos || []).length > 0 && (
+                <>
+                  <div className="foto-grid" style={{ marginTop: '0.5rem' }}>
+                    {(form.dokumentationFotos || []).map((att, i) => (
+                      <div key={i} className="foto-tile">
+                        <button type="button" className="foto-tile-imgbtn" onClick={() => openFormFotos(form.dokumentationFotos || [], i)} aria-label={`Foto ${i + 1} ansehen`}>
+                          <img src={getAttachmentSrc(att)} alt="" crossOrigin="anonymous" />
+                        </button>
+                        <button
+                          type="button"
+                          className="foto-tile-del"
+                          onClick={async () => {
+                            if (window.confirm('Foto wirklich löschen?')) await removeFormFoto(i)
+                          }}
+                          aria-label={`Foto ${i + 1} löschen`}
+                          title="Foto löschen"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="muted" style={{ marginTop: '0.35rem' }}>
+                    Fotos: {(form.dokumentationFotos || []).length} (werden erst beim Anlegen des Auftrags gespeichert)
+                  </p>
+                </>
+              )}
             </label>
             <label>
               Übersichtsplan Download-Link
@@ -1357,6 +1436,37 @@ function AuftragListe() {
           )}
         </div>
       )}
+
+      {formFotoViewer.open && formFotoViewer.fotos.length > 0 && (
+        <div className="foto-lightbox" onClick={closeFormFotos} role="dialog" aria-modal="true" aria-label="Foto anzeigen">
+          <button type="button" className="foto-lightbox-close" onClick={closeFormFotos} aria-label="Schließen">
+            ×
+          </button>
+          <div className="foto-lightbox-inner" onClick={(e) => e.stopPropagation()}>
+            {formFotoViewer.fotos.length > 1 && (
+              <button type="button" className="foto-lightbox-prev" onClick={prevFormFoto} aria-label="Vorheriges Foto">
+                ‹
+              </button>
+            )}
+            <img
+              src={getAttachmentSrc(formFotoViewer.fotos[formFotoViewer.currentIndex])}
+              alt=""
+              className="foto-lightbox-img"
+              crossOrigin="anonymous"
+            />
+            {formFotoViewer.fotos.length > 1 && (
+              <button type="button" className="foto-lightbox-next" onClick={nextFormFoto} aria-label="Nächstes Foto">
+                ›
+              </button>
+            )}
+          </div>
+          {formFotoViewer.fotos.length > 1 && (
+            <p className="foto-lightbox-counter">
+              {formFotoViewer.currentIndex + 1} / {formFotoViewer.fotos.length}
+            </p>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -1370,6 +1480,32 @@ function AuftragDetail() {
   const [saveStatus, setSaveStatus] = useState('') // '' | 'gespeichert'
   const [ortsanwesenheitStatus, setOrtsanwesenheitStatus] = useState('')
   const [fotoUploadHinweis, setFotoUploadHinweis] = useState('')
+  const [detailFotoViewer, setDetailFotoViewer] = useState({ open: false, fotos: [], currentIndex: 0 })
+  const openDetailFotos = (fotos, idx = 0) => {
+    if (!fotos?.length) return
+    setDetailFotoViewer({ open: true, fotos, currentIndex: Math.max(0, Math.min(idx, fotos.length - 1)) })
+  }
+  const closeDetailFotos = () => setDetailFotoViewer((v) => ({ ...v, open: false }))
+  const nextDetailFoto = () =>
+    setDetailFotoViewer((v) => ({ ...v, currentIndex: (v.currentIndex + 1) % v.fotos.length }))
+  const prevDetailFoto = () =>
+    setDetailFotoViewer((v) => ({ ...v, currentIndex: (v.currentIndex - 1 + v.fotos.length) % v.fotos.length }))
+  const removeDetailFoto = async (idx) => {
+    const att = (auftrag?.dokumentationFotos || [])[idx]
+    if (att?.url) {
+      const result = await deleteUploadOnServer(att)
+      if (!result.ok && !result.skipped) {
+        alert('Server-Foto konnte nicht gelöscht werden.')
+        return
+      }
+    }
+    setAuftrag((p) => {
+      const list = Array.isArray(p?.dokumentationFotos) ? [...p.dokumentationFotos] : []
+      if (idx < 0 || idx >= list.length) return p
+      list.splice(idx, 1)
+      return { ...p, dokumentationFotos: list }
+    })
+  }
   const kameraCanvasRef = useRef(null)
   const [kameraFlow, setKameraFlow] = useState({
     open: false,
@@ -1886,6 +2022,28 @@ function AuftragDetail() {
                 <p className="foto-speichern-hinweis">Bitte auf «Speichern» klicken, damit die Fotos dauerhaft gespeichert werden.</p>
                 {fotoUploadHinweis && <p className="foto-upload-hinweis" role="status">{fotoUploadHinweis}</p>}
               </div>
+              {(auftrag.dokumentationFotos || []).length > 0 && (
+                <div className="foto-grid" style={{ marginTop: '0.75rem' }}>
+                  {(auftrag.dokumentationFotos || []).map((att, i) => (
+                    <div key={i} className="foto-tile">
+                      <button type="button" className="foto-tile-imgbtn" onClick={() => openDetailFotos(auftrag.dokumentationFotos || [], i)} aria-label={`Foto ${i + 1} ansehen`}>
+                        <img src={getAttachmentSrc(att)} alt="" crossOrigin="anonymous" />
+                      </button>
+                      <button
+                        type="button"
+                        className="foto-tile-del"
+                        onClick={async () => {
+                          if (window.confirm('Foto wirklich löschen?')) await removeDetailFoto(i)
+                        }}
+                        aria-label={`Foto ${i + 1} löschen`}
+                        title="Foto löschen"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </label>
           </div>
         </section>
@@ -2039,6 +2197,37 @@ function AuftragDetail() {
                   </button>
                 </div>
               </div>
+            </div>
+          )}
+
+          {detailFotoViewer.open && detailFotoViewer.fotos.length > 0 && (
+            <div className="foto-lightbox" onClick={closeDetailFotos} role="dialog" aria-modal="true" aria-label="Foto anzeigen">
+              <button type="button" className="foto-lightbox-close" onClick={closeDetailFotos} aria-label="Schließen">
+                ×
+              </button>
+              <div className="foto-lightbox-inner" onClick={(e) => e.stopPropagation()}>
+                {detailFotoViewer.fotos.length > 1 && (
+                  <button type="button" className="foto-lightbox-prev" onClick={prevDetailFoto} aria-label="Vorheriges Foto">
+                    ‹
+                  </button>
+                )}
+                <img
+                  src={getAttachmentSrc(detailFotoViewer.fotos[detailFotoViewer.currentIndex])}
+                  alt=""
+                  className="foto-lightbox-img"
+                  crossOrigin="anonymous"
+                />
+                {detailFotoViewer.fotos.length > 1 && (
+                  <button type="button" className="foto-lightbox-next" onClick={nextDetailFoto} aria-label="Nächstes Foto">
+                    ›
+                  </button>
+                )}
+              </div>
+              {detailFotoViewer.fotos.length > 1 && (
+                <p className="foto-lightbox-counter">
+                  {detailFotoViewer.currentIndex + 1} / {detailFotoViewer.fotos.length}
+                </p>
+              )}
             </div>
           )}
         </>

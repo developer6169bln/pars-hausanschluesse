@@ -105,7 +105,7 @@ app.use(express.json({ limit: '50mb' }))
 
 app.use((_req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*')
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS')
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
   next()
 })
@@ -180,6 +180,37 @@ app.post('/api/upload', upload.single('file'), (req, res) => {
   }
   const url = `${API_BASE}/uploads/${req.file.filename}`
   res.json({ url, name: req.file.originalname, size: req.file.size, type: req.file.mimetype || 'image/jpeg' })
+})
+
+app.delete('/api/upload/:filename', (req, res) => {
+  const raw = req.params.filename || ''
+  let filename = raw
+  try {
+    filename = decodeURIComponent(raw)
+  } catch (_) {}
+
+  // Sicherheit: nur einfache Dateinamen (kein ../, keine Slashes)
+  if (!filename || filename.includes('/') || filename.includes('\\') || filename.includes('..')) {
+    return res.status(400).json({ error: 'Ungültiger Dateiname' })
+  }
+  // Optional: nur unsere generierten Namen zulassen
+  if (!/^[a-zA-Z0-9._-]+$/.test(filename)) {
+    return res.status(400).json({ error: 'Ungültiger Dateiname' })
+  }
+
+  const filePath = path.join(UPLOAD_DIR, filename)
+  if (!filePath.startsWith(UPLOAD_DIR)) {
+    return res.status(400).json({ error: 'Ungültiger Pfad' })
+  }
+
+  fs.unlink(filePath, (err) => {
+    if (err) {
+      if (err.code === 'ENOENT') return res.status(404).json({ error: 'Datei nicht gefunden' })
+      console.error('DELETE /api/upload Fehler:', err.message)
+      return res.status(500).json({ error: 'Löschen fehlgeschlagen' })
+    }
+    res.json({ ok: true })
+  })
 })
 
 // Frontend (Vite-Build) ausliefern, damit Railway die App unter / anzeigt
