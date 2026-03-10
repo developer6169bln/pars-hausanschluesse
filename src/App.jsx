@@ -82,22 +82,25 @@ const readOneAsDataUrl = async (file) => {
   }
 }
 
-/** Nimmt File-Liste (oder Array), lädt auf Server hoch oder speichert als Data-URL. Gibt immer ein Array zurück. */
+/** Nimmt File-Liste (oder Array), lädt auf Server hoch oder speichert als Data-URL.
+ *  Gibt { attachments, fallbackUsed } zurück. fallbackUsed = true, wenn Server-Upload fehlgeschlagen. */
 const filesToAttachments = async (files) => {
   const list = Array.from(files || [])
-  if (!list.length) return []
+  if (!list.length) return { attachments: [], fallbackUsed: false }
   try {
     if (API_BASE) {
       try {
-        return await Promise.all(list.map((file) => uploadOneToServer(file)))
+        const attachments = await Promise.all(list.map((file) => uploadOneToServer(file)))
+        return { attachments, fallbackUsed: false }
       } catch (e) {
         console.warn('Server-Upload fehlgeschlagen, Fallback auf lokale Speicherung', e)
       }
     }
-    return await Promise.all(list.map(readOneAsDataUrl))
+    const attachments = await Promise.all(list.map(readOneAsDataUrl))
+    return { attachments, fallbackUsed: true }
   } catch (e) {
     console.error('Fotos konnten nicht verarbeitet werden:', e)
-    return []
+    return { attachments: [], fallbackUsed: false }
   }
 }
 
@@ -157,6 +160,7 @@ const defaultAuftrag = {
   aufmassLaenge: '',
   anzahlHausanschluesse: '',
   aufmassBemerkung: '',
+  dokumentationFotos: [],
 }
 
 const COLOR_HEX = {
@@ -407,6 +411,7 @@ function AuftragListe() {
   const [showNeuerAuftragForm, setShowNeuerAuftragForm] = useState(false)
   const [standortStatus, setStandortStatus] = useState('') // '' | 'loading' | 'ok' | 'error'
   const [ortsanwesenheitStatus, setOrtsanwesenheitStatus] = useState('') // '' | 'loading' | 'ok' | 'error'
+  const [formFotoHinweis, setFormFotoHinweis] = useState('')
 
   const standortSpeichern = async () => {
     if (!('geolocation' in navigator)) {
@@ -800,6 +805,7 @@ function AuftragListe() {
       uebersichtsplanDownloadUrl: form.uebersichtsplanDownloadUrl.trim(),
     }
     setAuftraege((a) => [neu, ...a])
+    setFormFotoHinweis('')
     setForm({
       termin: '',
       verbundGroesse: '',
@@ -1089,10 +1095,15 @@ function AuftragListe() {
                   const list = Array.from(e.target.files || [])
                   e.target.value = ''
                   if (!list.length) return
-                  const atts = await filesToAttachments(list)
-                  if (atts?.length) setForm((f) => ({ ...f, dokumentationFotos: [...(f.dokumentationFotos || []), ...atts] }))
+                  const { attachments, fallbackUsed } = await filesToAttachments(list)
+                  if (attachments?.length) {
+                    setForm((f) => ({ ...f, dokumentationFotos: [...(f.dokumentationFotos || []), ...attachments] }))
+                    if (fallbackUsed) setFormFotoHinweis('Server-Upload nicht möglich – Fotos werden mit dem Auftrag gespeichert.')
+                  }
                 }}
               />
+              <span className="field-hint">Fotos werden mit dem neuen Auftrag übernommen. Nicht vergessen, den Auftrag anzulegen.</span>
+              {formFotoHinweis && <span className="foto-upload-hinweis" role="status">{formFotoHinweis}</span>}
             </label>
             <label>
               Übersichtsplan Download-Link
@@ -1269,6 +1280,7 @@ function AuftragDetail() {
   const [auftrag, setAuftrag] = useState(null)
   const [saveStatus, setSaveStatus] = useState('') // '' | 'gespeichert'
   const [ortsanwesenheitStatus, setOrtsanwesenheitStatus] = useState('')
+  const [fotoUploadHinweis, setFotoUploadHinweis] = useState('')
 
   const ortsanwesenheitErfassen = async () => {
     if (!('geolocation' in navigator)) {
@@ -1339,6 +1351,7 @@ function AuftragDetail() {
         }),
       )
       setSaveStatus('gespeichert')
+      setFotoUploadHinweis('')
     }
   }
 
@@ -1609,11 +1622,14 @@ function AuftragDetail() {
                       const list = Array.from(e.target.files || [])
                       e.target.value = ''
                       if (!list.length) return
-                      const atts = await filesToAttachments(list)
-                      if (atts?.length) setAuftrag((p) => ({
-                        ...p,
-                        dokumentationFotos: [...(p.dokumentationFotos || []), ...atts],
-                      }))
+                      const { attachments, fallbackUsed } = await filesToAttachments(list)
+                      if (attachments?.length) {
+                        setAuftrag((p) => ({
+                          ...p,
+                          dokumentationFotos: [...(p.dokumentationFotos || []), ...attachments],
+                        }))
+                        if (fallbackUsed) setFotoUploadHinweis('Server-Upload nicht möglich – Fotos werden beim Speichern des Auftrags mitgespeichert.')
+                      }
                     }}
                   />
                 </div>
@@ -1627,17 +1643,22 @@ function AuftragDetail() {
                       const list = Array.from(e.target.files || [])
                       e.target.value = ''
                       if (!list.length) return
-                      const atts = await filesToAttachments(list)
-                      if (atts?.length) setAuftrag((p) => ({
-                        ...p,
-                        dokumentationFotos: [...(p.dokumentationFotos || []), ...atts],
-                      }))
+                      const { attachments, fallbackUsed } = await filesToAttachments(list)
+                      if (attachments?.length) {
+                        setAuftrag((p) => ({
+                          ...p,
+                          dokumentationFotos: [...(p.dokumentationFotos || []), ...attachments],
+                        }))
+                        if (fallbackUsed) setFotoUploadHinweis('Server-Upload nicht möglich – Fotos werden beim Speichern des Auftrags mitgespeichert.')
+                      }
                     }}
                   />
                 </div>
                 <span className="muted" style={{ fontSize: '0.9rem' }}>
                   Fotos gespeichert: {(auftrag.dokumentationFotos || []).length}
                 </span>
+                <p className="foto-speichern-hinweis">Bitte auf «Speichern» klicken, damit die Fotos dauerhaft gespeichert werden.</p>
+                {fotoUploadHinweis && <p className="foto-upload-hinweis" role="status">{fotoUploadHinweis}</p>}
               </div>
             </label>
           </div>

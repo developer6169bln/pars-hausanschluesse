@@ -100,7 +100,8 @@ const storage = multer.diskStorage({
 const upload = multer({ storage, limits: { fileSize: 25 * 1024 * 1024 } }) // 25 MB
 
 const app = express()
-app.use(express.json({ limit: '2mb' }))
+// Größeres Limit, damit Aufträge mit vielen Fotos (base64-Fallback) gespeichert werden können
+app.use(express.json({ limit: '50mb' }))
 
 app.use((_req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*')
@@ -108,6 +109,9 @@ app.use((_req, res, next) => {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
   next()
 })
+
+// CORS-Preflight (z. B. für Upload vom Frontend auf anderem Port)
+app.options('*', (_req, res) => res.sendStatus(204))
 
 app.use('/uploads', express.static(UPLOAD_DIR))
 
@@ -175,7 +179,7 @@ app.post('/api/upload', upload.single('file'), (req, res) => {
     return res.status(400).json({ error: 'Keine Datei' })
   }
   const url = `${API_BASE}/uploads/${req.file.filename}`
-  res.json({ url, name: req.file.originalname, size: req.file.size })
+  res.json({ url, name: req.file.originalname, size: req.file.size, type: req.file.mimetype || 'image/jpeg' })
 })
 
 // Frontend (Vite-Build) ausliefern, damit Railway die App unter / anzeigt

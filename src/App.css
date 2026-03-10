@@ -177,6 +177,20 @@ textarea {
   font-size: 0.8rem;
   color: #64748b;
 }
+.foto-speichern-hinweis {
+  margin: 0.5rem 0 0;
+  font-size: 0.85rem;
+  color: #64748b;
+}
+.foto-upload-hinweis {
+  margin: 0.35rem 0 0;
+  font-size: 0.8rem;
+  color: #b45309;
+  background: #fffbeb;
+  padding: 0.35rem 0.5rem;
+  border-radius: 4px;
+  border-left: 3px solid #f59e0b;
+}
 /* Datei-Input unsichtbar über Button legen, damit Mobilgeräte den Picker öffnen (kein display:none) */
 .file-trigger-wrap {
   position: relative;
