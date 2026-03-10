@@ -1,5 +1,5 @@
 import { Routes, Route, Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { useState, useEffect, createContext, useContext } from 'react'
+import { useState, useEffect, useRef, createContext, useContext } from 'react'
 
 const AuftraegeContext = createContext(null)
 
@@ -28,6 +28,95 @@ async function uploadOneToServer(file) {
   if (!res.ok) throw new Error(await res.text().catch(() => 'Upload fehlgeschlagen'))
   const data = await res.json()
   return { name: data.name || file.name, url: data.url, size: data.size ?? file.size, type: file.type }
+}
+
+function formatAccuracyHint(accuracy) {
+  const a = Number(accuracy)
+  if (!Number.isFinite(a) || a <= 0) return ''
+  return `GPS Genauigkeit: ±${Math.round(a)} m`
+}
+
+async function reverseGeocodeNominatim(lat, lon) {
+  const url = `https://nominatim.openstreetmap.org/reverse?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&format=json`
+  const res = await fetch(url, { headers: { Accept: 'application/json' } })
+  if (!res.ok) throw new Error('Reverse-Geocoding fehlgeschlagen')
+  const data = await res.json()
+  const a = data?.address || {}
+  const street = a.road || a.pedestrian || a.footway || a.cycleway || a.path || ''
+  const house = a.house_number || ''
+  return { street, house, raw: data }
+}
+
+function drawOverlay(ctx, canvasW, canvasH, { street, house, tsLabel }) {
+  const addressLine = [street, house].filter(Boolean).join(' ').trim()
+  const lines = [addressLine || 'Adresse: —', tsLabel || '']
+  const pad = Math.max(12, Math.round(canvasW * 0.02))
+  const fontSize = Math.max(18, Math.round(canvasW * 0.03))
+  const lineHeight = Math.round(fontSize * 1.25)
+  const boxH = pad * 2 + lineHeight * (lines.filter(Boolean).length || 1)
+  const y0 = canvasH - boxH - pad
+
+  ctx.save()
+  ctx.fillStyle = 'rgba(0,0,0,0.6)'
+  ctx.fillRect(pad, y0, canvasW - pad * 2, boxH)
+  ctx.fillStyle = '#fff'
+  ctx.font = `${fontSize}px system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif`
+  ctx.textBaseline = 'top'
+
+  let y = y0 + pad
+  for (const line of lines) {
+    if (!line) continue
+    ctx.fillText(line, pad * 1.5, y)
+    y += lineHeight
+  }
+  ctx.restore()
+}
+
+async function fileToCanvas(canvas, file, { maxWidth = 1600 } = {}) {
+  const url = URL.createObjectURL(file)
+  try {
+    const img = await new Promise((resolve, reject) => {
+      const i = new Image()
+      i.onload = () => resolve(i)
+      i.onerror = reject
+      i.src = url
+    })
+    let w = img.naturalWidth || img.width
+    let h = img.naturalHeight || img.height
+    if (maxWidth && w > maxWidth) {
+      h = Math.round((h * maxWidth) / w)
+      w = maxWidth
+    }
+    canvas.width = w
+    canvas.height = h
+    const ctx = canvas.getContext('2d')
+    if (!ctx) throw new Error('Canvas nicht verfügbar')
+    ctx.drawImage(img, 0, 0, w, h)
+    return { width: w, height: h }
+  } finally {
+    URL.revokeObjectURL(url)
+  }
+}
+
+async function canvasToJpegFile(canvas, fileNameBase = 'foto', quality = 0.9) {
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality))
+  if (!blob) throw new Error('Bild konnte nicht erzeugt werden')
+  const safeBase = (fileNameBase || 'foto').replace(/[^a-zA-Z0-9._-]/g, '_')
+  const name = `${safeBase}-${Date.now()}.jpg`
+  return new File([blob], name, { type: 'image/jpeg' })
+}
+
+async function fileToAttachmentWithMeta(file, meta) {
+  if (API_BASE) {
+    try {
+      const att = await uploadOneToServer(file)
+      return { attachment: { ...att, meta }, fallbackUsed: false }
+    } catch (e) {
+      console.warn('Server-Upload fehlgeschlagen, Fallback auf lokale Speicherung', e)
+    }
+  }
+  const att = await readOneAsDataUrl(file)
+  return { attachment: { ...att, meta }, fallbackUsed: true }
 }
 
 function compressDataUrl(dataUrl) {
@@ -1281,6 +1370,137 @@ function AuftragDetail() {
   const [saveStatus, setSaveStatus] = useState('') // '' | 'gespeichert'
   const [ortsanwesenheitStatus, setOrtsanwesenheitStatus] = useState('')
   const [fotoUploadHinweis, setFotoUploadHinweis] = useState('')
+  const kameraCanvasRef = useRef(null)
+  const [kameraFlow, setKameraFlow] = useState({
+    open: false,
+    loading: false,
+    error: '',
+    file: null,
+    lat: null,
+    lng: null,
+    accuracy: null,
+    street: '',
+    house: '',
+  })
+
+  const closeKameraFlow = () => {
+    setKameraFlow({
+      open: false,
+      loading: false,
+      error: '',
+      file: null,
+      lat: null,
+      lng: null,
+      accuracy: null,
+      street: '',
+      house: '',
+    })
+  }
+
+  const startKameraFlow = async (file) => {
+    if (!file) return
+    setFotoUploadHinweis('')
+    setKameraFlow((p) => ({
+      ...p,
+      open: true,
+      loading: true,
+      error: '',
+      file,
+      lat: null,
+      lng: null,
+      accuracy: null,
+      street: '',
+      house: '',
+    }))
+    let pos = null
+    try {
+      pos = await new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, GEO_OPTIONS)
+      })
+    } catch (err) {
+      console.warn('Geolocation fehlgeschlagen', err)
+    }
+
+    const lat = pos?.coords?.latitude ?? null
+    const lng = pos?.coords?.longitude ?? null
+    const accuracy = pos?.coords?.accuracy ?? null
+
+    let street = ''
+    let house = ''
+    let error = ''
+    if (lat != null && lng != null) {
+      try {
+        const geo = await reverseGeocodeNominatim(lat, lng)
+        street = geo.street || ''
+        house = geo.house || ''
+      } catch (err) {
+        console.warn('Reverse-Geocoding fehlgeschlagen', err)
+        error = 'Adresse konnte nicht automatisch ermittelt werden. Bitte manuell prüfen.'
+      }
+    } else {
+      error = 'GPS konnte nicht ermittelt werden. Bitte Adresse manuell prüfen.'
+    }
+
+    setKameraFlow((p) => ({
+      ...p,
+      loading: false,
+      error,
+      lat,
+      lng,
+      accuracy,
+      street,
+      house,
+    }))
+  }
+
+  useEffect(() => {
+    if (!kameraFlow.open || !kameraFlow.file) return
+    const canvas = kameraCanvasRef.current
+    if (!canvas) return
+    fileToCanvas(canvas, kameraFlow.file, { maxWidth: 1600 }).catch((e) => {
+      console.warn('Vorschau fehlgeschlagen', e)
+    })
+  }, [kameraFlow.open, kameraFlow.file])
+
+  const speichernKameraFoto = async () => {
+    const canvas = kameraCanvasRef.current
+    if (!canvas || !kameraFlow.file) return
+    const street = (kameraFlow.street || '').trim()
+    const house = (kameraFlow.house || '').trim()
+    if (!house) {
+      alert('Hausnummer bitte prüfen.')
+      return
+    }
+
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    const tsLabel = new Date().toLocaleString('de-DE')
+    drawOverlay(ctx, canvas.width, canvas.height, { street, house, tsLabel })
+
+    try {
+      const annotatedFile = await canvasToJpegFile(canvas, 'hausanschluss', 0.9)
+      const meta = {
+        capturedAt: Date.now(),
+        street,
+        house,
+        lat: kameraFlow.lat,
+        lng: kameraFlow.lng,
+        accuracy: kameraFlow.accuracy,
+        reverseGeocode: 'nominatim',
+      }
+      const { attachment, fallbackUsed } = await fileToAttachmentWithMeta(annotatedFile, meta)
+      setAuftrag((p) => ({
+        ...p,
+        dokumentationFotos: [...(p.dokumentationFotos || []), attachment],
+      }))
+      if (fallbackUsed) setFotoUploadHinweis('Server-Upload nicht möglich – Foto wird beim Speichern des Auftrags mitgespeichert.')
+      closeKameraFlow()
+    } catch (e) {
+      console.error('Foto speichern fehlgeschlagen', e)
+      alert('Foto konnte nicht gespeichert werden.')
+    }
+  }
 
   const ortsanwesenheitErfassen = async () => {
     if (!('geolocation' in navigator)) {
@@ -1622,13 +1842,19 @@ function AuftragDetail() {
                       const list = Array.from(e.target.files || [])
                       e.target.value = ''
                       if (!list.length) return
-                      const { attachments, fallbackUsed } = await filesToAttachments(list)
-                      if (attachments?.length) {
-                        setAuftrag((p) => ({
-                          ...p,
-                          dokumentationFotos: [...(p.dokumentationFotos || []), ...attachments],
-                        }))
-                        if (fallbackUsed) setFotoUploadHinweis('Server-Upload nicht möglich – Fotos werden beim Speichern des Auftrags mitgespeichert.')
+                      // Kamera-Workflow: GPS → Adresse prüfen → Overlay rendern → speichern
+                      await startKameraFlow(list[0])
+                      // Falls mehrere Bilder gewählt wurden: Rest normal hinzufügen (ohne Adress-Overlay)
+                      if (list.length > 1) {
+                        const rest = list.slice(1)
+                        const { attachments, fallbackUsed } = await filesToAttachments(rest)
+                        if (attachments?.length) {
+                          setAuftrag((p) => ({
+                            ...p,
+                            dokumentationFotos: [...(p.dokumentationFotos || []), ...attachments],
+                          }))
+                          if (fallbackUsed) setFotoUploadHinweis('Server-Upload nicht möglich – Fotos werden beim Speichern des Auftrags mitgespeichert.')
+                        }
                       }
                     }}
                   />
@@ -1764,6 +1990,57 @@ function AuftragDetail() {
           )}
         </div>
           </main>
+
+          {kameraFlow.open && (
+            <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Adresse prüfen" onClick={closeKameraFlow}>
+              <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+                <div className="modal-head">
+                  <h3>Adresse prüfen</h3>
+                  <button type="button" className="btn ghost" onClick={closeKameraFlow} aria-label="Schließen">Schließen</button>
+                </div>
+                <div className="modal-body">
+                  <canvas ref={kameraCanvasRef} className="kamera-preview-canvas" />
+                  <div className="modal-hints">
+                    {!!kameraFlow.accuracy && <p className="muted" style={{ margin: 0 }}>{formatAccuracyHint(kameraFlow.accuracy)}</p>}
+                    {!!kameraFlow.error && <p className="foto-upload-hinweis" style={{ marginTop: '0.5rem' }}>{kameraFlow.error}</p>}
+                    {kameraFlow.accuracy != null && Number(kameraFlow.accuracy) > 30 && (
+                      <p className="foto-upload-hinweis" style={{ marginTop: '0.5rem' }}>
+                        GPS ungenau – Adresse bitte besonders sorgfältig prüfen.
+                      </p>
+                    )}
+                  </div>
+                  <div className="modal-form">
+                    <label>
+                      Straße
+                      <input
+                        type="text"
+                        value={kameraFlow.street}
+                        onChange={(e) => setKameraFlow((p) => ({ ...p, street: e.target.value }))}
+                        placeholder="Straße"
+                      />
+                    </label>
+                    <label>
+                      Hausnummer
+                      <input
+                        type="text"
+                        value={kameraFlow.house}
+                        onChange={(e) => setKameraFlow((p) => ({ ...p, house: e.target.value }))}
+                        placeholder="Hausnummer"
+                      />
+                    </label>
+                  </div>
+                </div>
+                <div className="modal-actions">
+                  <button type="button" className="btn ghost" onClick={closeKameraFlow} disabled={kameraFlow.loading}>
+                    Neu erfassen
+                  </button>
+                  <button type="button" className="btn primary" onClick={speichernKameraFoto} disabled={kameraFlow.loading}>
+                    {kameraFlow.loading ? 'Laden…' : 'Speichern'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>
