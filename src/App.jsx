@@ -1795,6 +1795,15 @@ function AuftragDetail() {
               />
             </label>
             <label>
+              NVT
+              <input
+                type="text"
+                value={auftrag.nvt ?? ''}
+                onChange={(e) => setAuftrag((p) => ({ ...p, nvt: e.target.value }))}
+                placeholder="NVT"
+              />
+            </label>
+            <label>
               Ortsanwesenheit (Standort + Uhrzeit)
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
                 <button
