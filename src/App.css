@@ -234,6 +234,40 @@ textarea {
 .foto-tile-del:hover {
   background: rgba(15, 23, 42, 0.85);
 }
+
+/* Baugruben-Messung */
+.baugruben-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.baugrube-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.baugrube-row input {
+  width: 6rem;
+  min-width: 4rem;
+}
+.baugrube-unit {
+  color: #64748b;
+  font-size: 0.9rem;
+}
+.baugrube-del {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.9rem;
+}
+.baugruben-sum {
+  margin-top: 0.5rem;
+  font-size: 0.95rem;
+  color: #0f172a;
+}
+.baugruben-sum strong {
+  font-weight: 600;
+}
+
 /* Datei-Input unsichtbar über Button legen, damit Mobilgeräte den Picker öffnen (kein display:none) */
 .file-trigger-wrap {
   position: relative;

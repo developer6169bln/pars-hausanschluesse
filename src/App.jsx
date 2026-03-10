@@ -277,6 +277,7 @@ const defaultAuftrag = {
   anzahlHausanschluesse: '',
   aufmassBemerkung: '',
   dokumentationFotos: [],
+  baugrubenLaengen: [], // Längen in m pro Baugrube, Gesamtlänge = Summe (z. B. aus AR-Messung)
 }
 
 const COLOR_HEX = {
@@ -424,6 +425,15 @@ function parseLaenge(auftrag) {
   if (!roh) return 0
   const num = parseFloat(roh.replace(',', '.'))
   return Number.isFinite(num) ? num : 0
+}
+
+/** Summe aller Baugruben-Längen (m). Array aus Zahlen oder parsebarer Strings. */
+function parseBaugrubenGesamt(auftrag) {
+  const arr = Array.isArray(auftrag?.baugrubenLaengen) ? auftrag.baugrubenLaengen : []
+  return arr.reduce((sum, v) => {
+    const n = typeof v === 'number' ? v : parseFloat(String(v).replace(',', '.'))
+    return sum + (Number.isFinite(n) ? n : 0)
+  }, 0)
 }
 function terminToTs(termin) {
   const t = (termin || '').trim()
@@ -715,6 +725,9 @@ function AuftragListe() {
           <div className="item-meta">
             {(a.messungGraben != null && String(a.messungGraben).trim() !== '') ? (
               <span className="meta-chip">Messung Graben: {parseLaenge(a).toFixed(1)} m</span>
+            ) : null}
+            {parseBaugrubenGesamt(a) > 0 ? (
+              <span className="meta-chip">Baugruben: {parseBaugrubenGesamt(a).toFixed(1)} m</span>
             ) : null}
             {verbund ? (
               <span className="meta-chip">
@@ -2089,6 +2102,68 @@ function AuftragDetail() {
               </select>
             </label>
             <label>
+              Baugruben-Messung (Längen in m)
+              <p className="muted" style={{ marginBottom: '0.5rem', fontSize: '0.85rem' }}>
+                Eine Baugrube oder mehrere Baugruben – Längen addieren sich zur Gesamtlänge (z. B. aus AR-/LiDAR-Messung oder manuell).
+              </p>
+              <div className="baugruben-list">
+                {(Array.isArray(auftrag.baugrubenLaengen) ? auftrag.baugrubenLaengen : []).map((val, i) => (
+                  <div key={i} className="baugrube-row">
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={val === '' || val == null ? '' : (Number(val) || 0)}
+                      onChange={(e) => {
+                        const v = e.target.value === '' ? '' : parseFloat(e.target.value)
+                        setAuftrag((p) => {
+                          const list = [...(Array.isArray(p.baugrubenLaengen) ? p.baugrubenLaengen : [])]
+                          while (list.length <= i) list.push(0)
+                          list[i] = Number.isFinite(v) ? v : 0
+                          return { ...p, baugrubenLaengen: list }
+                        })
+                      }}
+                      placeholder="m"
+                      inputMode="decimal"
+                    />
+                    <span className="baugrube-unit">m</span>
+                    <button
+                      type="button"
+                      className="btn ghost baugrube-del"
+                      onClick={() => {
+                        setAuftrag((p) => {
+                          const list = [...(Array.isArray(p.baugrubenLaengen) ? p.baugrubenLaengen : [])]
+                          list.splice(i, 1)
+                          return { ...p, baugrubenLaengen: list }
+                        })
+                      }}
+                      aria-label="Baugrube entfernen"
+                      title="Entfernen"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  className="btn ghost"
+                  onClick={() => {
+                    setAuftrag((p) => ({
+                      ...p,
+                      baugrubenLaengen: [...(Array.isArray(p.baugrubenLaengen) ? p.baugrubenLaengen : []), 0],
+                    }))
+                  }}
+                >
+                  + Baugrube
+                </button>
+              </div>
+              {parseBaugrubenGesamt(auftrag) > 0 && (
+                <p className="baugruben-sum" role="status">
+                  Gesamtlänge Baugruben: <strong>{parseBaugrubenGesamt(auftrag).toFixed(2)} m</strong>
+                </p>
+              )}
+            </label>
+            <label>
               Messung Graben
               <input
                 type="text"
@@ -2285,6 +2360,7 @@ function buildProtokollText(a) {
     a.telefon ? `Telefon: ${a.telefon}` : null,
     a.nvtStandort ? `NVT Standort: ${a.nvtStandort}` : null,
     a.ortsanwesenheit ? `Ortsanwesenheit: ${formatOrtsanwesenheit(a.ortsanwesenheit)}` : null,
+    parseBaugrubenGesamt(a) > 0 ? `Baugruben Gesamtlänge: ${parseBaugrubenGesamt(a).toFixed(2)} m` : null,
     a.notizen ? `Notizen: ${a.notizen}` : null,
   ].filter(Boolean)
   return lines.join('\n')
@@ -2352,6 +2428,9 @@ function Abschlussprotokoll() {
             <dt>Telefon</dt><dd>{auftrag.telefon || '—'}</dd>
             <dt>NVT Standort</dt><dd>{auftrag.nvtStandort || '—'}</dd>
             <dt>Ortsanwesenheit (mit Uhrzeit)</dt><dd>{auftrag.ortsanwesenheit ? formatOrtsanwesenheit(auftrag.ortsanwesenheit) : '—'}</dd>
+            {parseBaugrubenGesamt(auftrag) > 0 ? (
+              <><dt>Baugruben Gesamtlänge</dt><dd>{parseBaugrubenGesamt(auftrag).toFixed(2)} m</dd></>
+            ) : null}
             {auftrag.notizen ? (<><dt>Notizen</dt><dd>{auftrag.notizen}</dd></>) : null}
           </dl>
         </section>
