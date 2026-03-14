@@ -2661,6 +2661,11 @@ function MonteurePage() {
   )
 }
 
+// Optionen wie in der BauMeasurePro-App (identische Auftragserfassung)
+const VERBUND_GROESSEN = ['22x7', '8x7', '12x7']
+const VERBUND_FARBEN = ['Orange', 'Orange - Schwarz', 'Orange - Rot', 'Orange - Weiß']
+const PIPES_FARBEN = ['rot', 'grün', 'blau', 'gelb', 'weiß', 'grau', 'braun', 'violett', 'türkis', 'schwarz', 'orange', 'rosa']
+
 // ========== Admin: Projekte (an Monteure zuweisen) ==========
 function ProjektePage() {
   const [projects, setProjects] = useState([])
@@ -2669,6 +2674,26 @@ function ProjektePage() {
   const [error, setError] = useState(null)
   const [projectName, setProjectName] = useState('')
   const [assignToUserId, setAssignToUserId] = useState('')
+  const [kundeName, setKundeName] = useState('')
+  const [kundeTelefon, setKundeTelefon] = useState('')
+  const [kundeEmail, setKundeEmail] = useState('')
+  const [kolonne, setKolonne] = useState('')
+  const [strasse, setStrasse] = useState('')
+  const [hausnummer, setHausnummer] = useState('')
+  const [postleitzahl, setPostleitzahl] = useState('')
+  const [ort, setOrt] = useState('')
+  const [nvtNummer, setNvtNummer] = useState('')
+  const [verbundGroesse, setVerbundGroesse] = useState('')
+  const [verbundFarbe, setVerbundFarbe] = useState('')
+  const [pipesFarbe1, setPipesFarbe1] = useState('')
+  const [pipesFarbe2, setPipesFarbe2] = useState('')
+  const [auftragAbgeschlossen, setAuftragAbgeschlossen] = useState(false)
+  const [termin, setTermin] = useState('')
+  const [googleDriveLink, setGoogleDriveLink] = useState('')
+  const [notizen, setNotizen] = useState('')
+  const [selectedProjectIds, setSelectedProjectIds] = useState([])
+  const [bulkAssignUserId, setBulkAssignUserId] = useState('')
+  const [bulkAssigning, setBulkAssigning] = useState(false)
 
   const load = () => {
     if (!API_BASE) {
@@ -2698,16 +2723,55 @@ function ProjektePage() {
 
   useEffect(load, [])
 
+  const resetForm = () => {
+    setProjectName('')
+    setKundeName('')
+    setKundeTelefon('')
+    setKundeEmail('')
+    setKolonne('')
+    setStrasse('')
+    setHausnummer('')
+    setPostleitzahl('')
+    setOrt('')
+    setNvtNummer('')
+    setVerbundGroesse('')
+    setVerbundFarbe('')
+    setPipesFarbe1('')
+    setPipesFarbe2('')
+    setAuftragAbgeschlossen(false)
+    setTermin('')
+    setGoogleDriveLink('')
+    setNotizen('')
+  }
+
   const addProject = () => {
     const n = (projectName || '').trim() || 'Neues Projekt'
     if (!API_BASE) return
+    const payload = {
+      name: n,
+      assignedToUserId: assignToUserId || null,
+      kundeName: (kundeName || '').trim() || null,
+      kundeTelefon: (kundeTelefon || '').trim() || null,
+      kundeEmail: (kundeEmail || '').trim() || null,
+      kolonne: (kolonne || '').trim() || null,
+      strasse: (strasse || '').trim() || null,
+      hausnummer: (hausnummer || '').trim() || null,
+      postleitzahl: (postleitzahl || '').trim() || null,
+      ort: (ort || '').trim() || null,
+      nvtNummer: (nvtNummer || '').trim() || null,
+      verbundGroesse: (verbundGroesse || '').trim() || null,
+      verbundFarbe: (verbundFarbe || '').trim() || null,
+      pipesFarbe1: (pipesFarbe1 || '').trim() || null,
+      pipesFarbe2: (pipesFarbe2 || '').trim() || null,
+      auftragAbgeschlossen: auftragAbgeschlossen || null,
+      termin: (termin || '').trim() ? termin : null,
+      googleDriveLink: (googleDriveLink || '').trim() || null,
+      notizen: (notizen || '').trim() || null,
+    }
     fetch(`${API_BASE}/api/projects`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: n,
-        assignedToUserId: assignToUserId || null,
-      }),
+      body: JSON.stringify(payload),
     })
       .then((r) => {
         if (!r.ok) throw new Error('Speichern fehlgeschlagen')
@@ -2715,7 +2779,7 @@ function ProjektePage() {
       })
       .then((newProj) => {
         setProjects((prev) => [...prev, newProj])
-        setProjectName('')
+        resetForm()
       })
       .catch((e) => alert(e.message))
   }
@@ -2733,8 +2797,44 @@ function ProjektePage() {
       })
       .then((updated) => {
         setProjects((prev) => prev.map((p) => (p.id === updated.id ? updated : p)))
+        setSelectedProjectIds((prev) => prev.filter((id) => id !== projectId))
       })
       .catch((e) => alert(e.message))
+  }
+
+  const unassignedProjects = projects.filter((p) => !p.assignedToUserId || p.assignedToUserId === '')
+  const toggleProjectSelection = (id) => {
+    setSelectedProjectIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+  }
+  const toggleSelectAllUnassigned = () => {
+    if (selectedProjectIds.length >= unassignedProjects.length) {
+      setSelectedProjectIds([])
+    } else {
+      setSelectedProjectIds(unassignedProjects.map((p) => p.id))
+    }
+  }
+  const assignSelectedToUser = () => {
+    const userId = bulkAssignUserId && bulkAssignUserId.trim() ? bulkAssignUserId.trim() : null
+    if (!API_BASE || !userId || selectedProjectIds.length === 0) return
+    setBulkAssigning(true)
+    Promise.all(
+      selectedProjectIds.map((id) =>
+        fetch(`${API_BASE}/api/projects/${encodeURIComponent(id)}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ assignedToUserId: userId }),
+        }).then((r) => {
+          if (!r.ok) throw new Error(`Projekt ${id} fehlgeschlagen`)
+          return r.json()
+        })
+      )
+    )
+      .then(() => {
+        setSelectedProjectIds([])
+        return load()
+      })
+      .catch((e) => alert(e.message))
+      .finally(() => setBulkAssigning(false))
   }
 
   const userName = (userId) => {
@@ -2762,45 +2862,179 @@ function ProjektePage() {
           <>
             <section className="card">
               <h2>Neues Projekt</h2>
-              <div className="form-stack" style={{ maxWidth: '24rem', marginBottom: '1rem' }}>
+              <p className="muted" style={{ marginBottom: '1rem' }}>Auftragserfassung identisch zur BauMeasurePro-App.</p>
+              <div className="form-stack" style={{ maxWidth: '28rem' }}>
+                <h3 className="section-label">Grunddaten</h3>
                 <label>Projektname</label>
                 <input type="text" value={projectName} onChange={(e) => setProjectName(e.target.value)} placeholder="z. B. Musterstraße 1" />
+                <label>Name Kunde</label>
+                <input type="text" value={kundeName} onChange={(e) => setKundeName(e.target.value)} />
+                <label>Telefon Kunde</label>
+                <input type="tel" value={kundeTelefon} onChange={(e) => setKundeTelefon(e.target.value)} />
+                <label>E-Mail Kunde</label>
+                <input type="email" value={kundeEmail} onChange={(e) => setKundeEmail(e.target.value)} />
+
+                <h3 className="section-label">Kolonne</h3>
+                <label>Kolonne</label>
+                <input type="text" value={kolonne} onChange={(e) => setKolonne(e.target.value)} placeholder="z. B. Kolonne 1" />
+
+                <h3 className="section-label">Adresse</h3>
+                <label>Straße</label>
+                <input type="text" value={strasse} onChange={(e) => setStrasse(e.target.value)} />
+                <label>Hausnummer (z. B. 22A)</label>
+                <input type="text" value={hausnummer} onChange={(e) => setHausnummer(e.target.value)} />
+                <label>Postleitzahl</label>
+                <input type="text" inputMode="numeric" value={postleitzahl} onChange={(e) => setPostleitzahl(e.target.value)} />
+                <label>Ort</label>
+                <input type="text" value={ort} onChange={(e) => setOrt(e.target.value)} />
+
+                <h3 className="section-label">Auftrag</h3>
+                <label>NVT-Nummer</label>
+                <input type="text" value={nvtNummer} onChange={(e) => setNvtNummer(e.target.value)} />
+                <label>Verbund Größe</label>
+                <select value={verbundGroesse} onChange={(e) => setVerbundGroesse(e.target.value)}>
+                  <option value="">—</option>
+                  {VERBUND_GROESSEN.map((v) => (<option key={v} value={v}>{v}</option>))}
+                </select>
+                <label>Verbund Farbe</label>
+                <select value={verbundFarbe} onChange={(e) => setVerbundFarbe(e.target.value)}>
+                  <option value="">—</option>
+                  {VERBUND_FARBEN.map((v) => (<option key={v} value={v}>{v}</option>))}
+                </select>
+                <label>Pipes Farbe 1</label>
+                <select value={pipesFarbe1} onChange={(e) => setPipesFarbe1(e.target.value)}>
+                  <option value="">—</option>
+                  {PIPES_FARBEN.map((v) => (<option key={v} value={v}>{v}</option>))}
+                </select>
+                <label>Pipes Farbe 2</label>
+                <select value={pipesFarbe2} onChange={(e) => setPipesFarbe2(e.target.value)}>
+                  <option value="">—</option>
+                  {PIPES_FARBEN.map((v) => (<option key={v} value={v}>{v}</option>))}
+                </select>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <input type="checkbox" checked={auftragAbgeschlossen} onChange={(e) => setAuftragAbgeschlossen(e.target.checked)} />
+                  Auftrag abgeschlossen
+                </label>
+                <label>Termin (Datum & Uhrzeit)</label>
+                <input type="datetime-local" value={termin} onChange={(e) => setTermin(e.target.value)} />
+                <label>Google Drive Link</label>
+                <input type="url" value={googleDriveLink} onChange={(e) => setGoogleDriveLink(e.target.value)} placeholder="https://..." />
+
+                <h3 className="section-label">Notizen</h3>
+                <label>Notizen</label>
+                <textarea value={notizen} onChange={(e) => setNotizen(e.target.value)} rows={3} style={{ resize: 'vertical' }} />
+
                 <label>Zuweisen an Monteur</label>
                 <select value={assignToUserId} onChange={(e) => setAssignToUserId(e.target.value)}>
                   <option value="">— Keiner —</option>
                   {users.map((u) => (
-                    <option key={u.id} value={u.id}>{u.name} ({u.deviceId})</option>
+                    <option key={u.id} value={u.id}>{u.name} {u.deviceId ? `(${u.deviceId})` : ''}</option>
                   ))}
                 </select>
               </div>
-              <button type="button" className="btn primary" onClick={addProject}>Projekt anlegen</button>
+              <button type="button" className="btn primary" onClick={addProject} style={{ marginTop: '1rem' }} disabled={!(projectName || '').trim()}>Projekt anlegen</button>
             </section>
             <section className="card">
-              <h2>Projekte ({projects.length})</h2>
+              <h2>Projektübersicht</h2>
               {!loaded && <p className="muted">Laden…</p>}
               {loaded && error && <p className="muted" style={{ color: 'var(--error, #b91c1c)' }}>{error}</p>}
-              {loaded && !error && projects.length === 0 && <p className="muted">Noch keine Projekte. Oben ein Projekt anlegen und optional einem Monteur zuweisen.</p>}
+              {loaded && !error && projects.length === 0 && <p className="muted">Noch keine Projekte. Oben ein Projekt anlegen und zuweisen.</p>}
               {loaded && !error && projects.length > 0 && (
-                <ul className="list" style={{ listStyle: 'none', padding: 0 }}>
-                  {projects.map((p) => (
-                    <li key={p.id} className="list-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
-                      <div>
-                        <strong>{p.name}</strong>
-                        <span className="muted" style={{ marginLeft: '0.5rem' }}>→ {userName(p.assignedToUserId)}</span>
-                      </div>
-                      <select
-                        value={p.assignedToUserId || ''}
-                        onChange={(e) => setAssignment(p.id, e.target.value || null)}
-                        style={{ minWidth: '10rem' }}
+                <>
+                  <p className="muted" style={{ marginBottom: '1rem' }}>Nur noch nicht zugewiesene Projekte können einem Monteur zugewiesen werden. Zugewiesene Projekte sind blockiert.</p>
+                  {unassignedProjects.length > 0 && (
+                    <div className="project-bulk-assign-bar" style={{ marginBottom: '1rem', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.75rem' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', cursor: 'pointer' }}>
+                        <input
+                          type="checkbox"
+                          checked={selectedProjectIds.length > 0 && selectedProjectIds.length === unassignedProjects.length}
+                          onChange={toggleSelectAllUnassigned}
+                          aria-label="Alle nicht zugewiesenen auswählen"
+                        />
+                        <span>Alle auswählen</span>
+                      </label>
+                      <span className="muted">|</span>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <span>Mehrere zuweisen an:</span>
+                        <select
+                          value={bulkAssignUserId}
+                          onChange={(e) => setBulkAssignUserId(e.target.value)}
+                          style={{ minWidth: '11rem' }}
+                          aria-label="Monteur für Mehrfachzuweisung"
+                        >
+                          <option value="">— Monteur wählen —</option>
+                          {users.map((u) => (
+                            <option key={u.id} value={u.id}>{u.name} {u.deviceId ? `(${u.deviceId})` : ''}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <button
+                        type="button"
+                        className="btn primary"
+                        onClick={assignSelectedToUser}
+                        disabled={selectedProjectIds.length === 0 || !bulkAssignUserId || bulkAssigning}
                       >
-                        <option value="">— Keiner —</option>
-                        {users.map((u) => (
-                          <option key={u.id} value={u.id}>{u.name}</option>
-                        ))}
-                      </select>
-                    </li>
-                  ))}
-                </ul>
+                        {bulkAssigning ? 'Zuweisen…' : `${selectedProjectIds.length} ausgewählte zuweisen`}
+                      </button>
+                      {selectedProjectIds.length > 0 && (
+                        <button type="button" className="btn ghost" onClick={() => setSelectedProjectIds([])}>
+                          Auswahl aufheben
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  <ul className="list project-assign-list" style={{ listStyle: 'none', padding: 0 }}>
+                    {projects.map((p) => {
+                      const isAssigned = p.assignedToUserId != null && p.assignedToUserId !== ''
+                      const isSelected = selectedProjectIds.includes(p.id)
+                      return (
+                        <li
+                          key={p.id}
+                          className={`list-item project-assign-row ${isAssigned ? 'project-assign-row--assigned' : ''} ${isSelected ? 'project-assign-row--selected' : ''}`}
+                          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0, flex: 1 }}>
+                            {!isAssigned && (
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => toggleProjectSelection(p.id)}
+                                aria-label={`${p.name} auswählen`}
+                                className="project-assign-checkbox"
+                              />
+                            )}
+                            {isAssigned && <span style={{ width: '1.35rem', flexShrink: 0 }} aria-hidden />}
+                            <div>
+                              <strong>{p.name}</strong>
+                              {isAssigned ? (
+                                <span className="project-assign-blocked" style={{ marginLeft: '0.5rem' }} title="Bereits zugewiesen – nicht änderbar">
+                                  🔒 An {userName(p.assignedToUserId)} zugewiesen
+                                </span>
+                              ) : (
+                                <span className="muted" style={{ marginLeft: '0.5rem' }}>→ Noch nicht zugewiesen</span>
+                              )}
+                            </div>
+                          </div>
+                          {isAssigned ? (
+                            <span className="project-assign-blocked-badge" aria-hidden>blockiert</span>
+                          ) : (
+                            <select
+                              value={p.assignedToUserId || ''}
+                              onChange={(e) => setAssignment(p.id, e.target.value || null)}
+                              style={{ minWidth: '12rem' }}
+                              aria-label={`${p.name} zuweisen an`}
+                            >
+                              <option value="">— Monteur wählen —</option>
+                              {users.map((u) => (
+                                <option key={u.id} value={u.id}>{u.name} {u.deviceId ? `(${u.deviceId})` : ''}</option>
+                              ))}
+                            </select>
+                          )}
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </>
               )}
             </section>
           </>
