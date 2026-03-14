@@ -14,6 +14,8 @@ const DATA_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : __d
 const UPLOAD_DIR = path.join(DATA_DIR, 'uploads')
 const BACKUPS_DIR = path.join(DATA_DIR, 'backups')
 const AUFTRAEGE_FILE = path.join(DATA_DIR, 'auftraege.json')
+const USERS_FILE = path.join(DATA_DIR, 'users.json')
+const PROJECTS_FILE = path.join(DATA_DIR, 'projects.json')
 const BACKUP_LATEST = path.join(DATA_DIR, 'auftraege-backup-latest.json')
 const MAX_BACKUP_FILES = 30 // Anzahl zeitgestempelter Backups (älteste werden gelöscht)
 
@@ -87,6 +89,40 @@ function writeAuftraege(list) {
     console.error('Schreibfehler auftraege.json:', err.message, 'Pfad:', AUFTRAEGE_FILE)
     throw err
   }
+}
+
+// --- Users (Monteure / App-Nutzer) ---
+function readUsers() {
+  try {
+    const raw = fs.readFileSync(USERS_FILE, 'utf8')
+    const data = JSON.parse(raw)
+    return Array.isArray(data) ? data : []
+  } catch (err) {
+    if (err.code !== 'ENOENT') console.error('Lesefehler users.json:', err.message)
+    return []
+  }
+}
+
+function writeUsers(list) {
+  const arr = Array.isArray(list) ? list : []
+  fs.writeFileSync(USERS_FILE, JSON.stringify(arr, null, 2), 'utf8')
+}
+
+// --- Projects (für Zuweisung an Monteure; kompatibel mit BauMeasurePro-App) ---
+function readProjects() {
+  try {
+    const raw = fs.readFileSync(PROJECTS_FILE, 'utf8')
+    const data = JSON.parse(raw)
+    return Array.isArray(data) ? data : []
+  } catch (err) {
+    if (err.code !== 'ENOENT') console.error('Lesefehler projects.json:', err.message)
+    return []
+  }
+}
+
+function writeProjects(list) {
+  const arr = Array.isArray(list) ? list : []
+  fs.writeFileSync(PROJECTS_FILE, JSON.stringify(arr, null, 2), 'utf8')
 }
 
 const storage = multer.diskStorage({
@@ -211,6 +247,103 @@ app.delete('/api/upload/:filename', (req, res) => {
     }
     res.json({ ok: true })
   })
+})
+
+// ========== Admin: Users (Monteure) ==========
+app.get('/api/users', (_req, res) => {
+  res.json(readUsers())
+})
+
+app.post('/api/users', (req, res) => {
+  const users = readUsers()
+  const body = req.body || {}
+  const id = body.id || `user-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+  const name = String(body.name || '').trim() || 'Monteur'
+  const deviceId = String(body.deviceId || '').trim() || id
+  const newUser = { id, name, deviceId }
+  users.push(newUser)
+  writeUsers(users)
+  res.status(201).json(newUser)
+})
+
+app.put('/api/users', (req, res) => {
+  const list = Array.isArray(req.body) ? req.body : []
+  writeUsers(list)
+  res.json(list)
+})
+
+// ========== Admin: Projects (Zuweisung an Monteure) ==========
+app.get('/api/projects', (_req, res) => {
+  res.json(readProjects())
+})
+
+app.post('/api/projects', (req, res) => {
+  const projects = readProjects()
+  const body = req.body || {}
+  const id = body.id || `proj-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+  const project = {
+    id,
+    name: String(body.name || '').trim() || 'Neues Projekt',
+    createdAt: body.createdAt || new Date().toISOString(),
+    measurements: Array.isArray(body.measurements) ? body.measurements : [],
+    assignedToUserId: body.assignedToUserId || null,
+    strasse: body.strasse ?? null,
+    hausnummer: body.hausnummer ?? null,
+    postleitzahl: body.postleitzahl ?? null,
+    ort: body.ort ?? null,
+    nvtNummer: body.nvtNummer ?? null,
+    kolonne: body.kolonne ?? null,
+    verbundGroesse: body.verbundGroesse ?? null,
+    verbundFarbe: body.verbundFarbe ?? null,
+    pipesFarbe: body.pipesFarbe ?? null,
+    pipesFarbe1: body.pipesFarbe1 ?? null,
+    pipesFarbe2: body.pipesFarbe2 ?? null,
+    auftragAbgeschlossen: body.auftragAbgeschlossen ?? null,
+    termin: body.termin ?? null,
+    googleDriveLink: body.googleDriveLink ?? null,
+    notizen: body.notizen ?? null,
+    kundeName: body.kundeName ?? null,
+    kundeTelefon: body.kundeTelefon ?? null,
+    kundeEmail: body.kundeEmail ?? null,
+    threeDScans: Array.isArray(body.threeDScans) ? body.threeDScans : [],
+  }
+  projects.push(project)
+  writeProjects(projects)
+  res.status(201).json(project)
+})
+
+app.put('/api/projects', (req, res) => {
+  const list = Array.isArray(req.body) ? req.body : []
+  writeProjects(list)
+  res.json(list)
+})
+
+app.patch('/api/projects/:id', (req, res) => {
+  const projects = readProjects()
+  const id = req.params.id
+  const idx = projects.findIndex((p) => String(p.id) === String(id))
+  if (idx === -1) return res.status(404).json({ error: 'Projekt nicht gefunden' })
+  const patch = req.body || {}
+  projects[idx] = { ...projects[idx], ...patch }
+  writeProjects(projects)
+  res.json(projects[idx])
+})
+
+// ========== Mobile App: zugewiesene Projekte abrufen ==========
+// deviceId = Geräte-ID, die der Monteur in der App eingibt (oder die App automatisch sendet)
+app.get('/api/mobile/assigned-projects', (req, res) => {
+  const deviceId = (req.query.deviceId || req.query.device_id || '').toString().trim()
+  if (!deviceId) {
+    return res.status(400).json({ error: 'deviceId fehlt', message: 'Query-Parameter deviceId ist erforderlich.' })
+  }
+  const users = readUsers()
+  const user = users.find((u) => String(u.deviceId).trim() === deviceId)
+  if (!user) {
+    return res.json([])
+  }
+  const projects = readProjects()
+  const assigned = projects.filter((p) => p.assignedToUserId != null && String(p.assignedToUserId) === String(user.id))
+  res.json(assigned)
 })
 
 // Frontend (Vite-Build) ausliefern, damit Railway die App unter / anzeigt

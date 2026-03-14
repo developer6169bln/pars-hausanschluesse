@@ -26,3 +26,12 @@ Thumbs.db
 server/uploads/
 !server/uploads/.gitkeep
 server/auftraege.json
+server/auftraege-backup-latest.json
+server/backups/
+server/users.json
+server/projects.json
+
+# iOS / Xcode (ios-app)
+*.xcuserstate
+ios-app/**/xcuserdata/
+ios-app/**/DerivedData/

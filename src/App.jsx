@@ -1007,6 +1007,12 @@ function AuftragListe() {
           <Link to="/bericht" className="btn ghost">
             Bericht nach Datum
           </Link>
+          <Link to="/monteure" className="btn ghost">
+            Monteure (App-Zuweisung)
+          </Link>
+          <Link to="/projekte" className="btn ghost">
+            Projekte zuweisen
+          </Link>
         </div>
       </header>
 
@@ -2533,6 +2539,277 @@ function BerichtNachDatumPage() {
   )
 }
 
+// ========== Admin: Monteure (User für App-Zuweisung) ==========
+function MonteurePage() {
+  const [users, setUsers] = useState([])
+  const [loaded, setLoaded] = useState(false)
+  const [error, setError] = useState(null)
+  const [name, setName] = useState('')
+  const [deviceId, setDeviceId] = useState('')
+
+  const load = () => {
+    if (!API_BASE) {
+      setUsers([])
+      setLoaded(true)
+      return
+    }
+    setLoaded(false)
+    setError(null)
+    fetch(`${API_BASE}/api/users`)
+      .then((r) => {
+        if (!r.ok) throw new Error('Server fehlgeschlagen')
+        return r.json()
+      })
+      .then((list) => {
+        setUsers(Array.isArray(list) ? list : [])
+        setError(null)
+      })
+      .catch((e) => {
+        setUsers([])
+        setError(e.message)
+      })
+      .finally(() => setLoaded(true))
+  }
+
+  useEffect(load, [])
+
+  const addUser = () => {
+    const n = (name || '').trim() || 'Monteur'
+    const d = (deviceId || '').trim()
+    if (!API_BASE) return
+    fetch(`${API_BASE}/api/users`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: n, deviceId: d || undefined }),
+    })
+      .then((r) => {
+        if (!r.ok) throw new Error('Speichern fehlgeschlagen')
+        return r.json()
+      })
+      .then((newUser) => {
+        setUsers((prev) => [...prev, newUser])
+        setName('')
+        setDeviceId('')
+      })
+      .catch((e) => alert(e.message))
+  }
+
+  const removeUser = (user) => {
+    if (!window.confirm(`Monteur „${user.name}“ (${user.deviceId}) wirklich entfernen?`)) return
+    const next = users.filter((u) => u.id !== user.id)
+    setUsers(next)
+    fetch(`${API_BASE}/api/users`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(next),
+    }).catch((e) => {
+      alert('Speichern fehlgeschlagen: ' + e.message)
+      load()
+    })
+  }
+
+  return (
+    <div className="page">
+      <header className="topbar">
+        <Link to="/" className="link-back">← Zurück zur Übersicht</Link>
+        <h1>Monteure (App-Zuweisung)</h1>
+        <p className="subtitle">
+          Hier werden die Nutzer der BauMeasurePro-App angelegt. Jeder Monteur erhält eine <strong>Geräte-ID</strong> – diese trägt er in der App ein, um seine zugewiesenen Projekte zu laden.
+        </p>
+      </header>
+      <main className="content">
+        {!API_BASE && (
+          <section className="card">
+            <p className="muted">Server (VITE_API_URL) nicht konfiguriert. Bitte Server starten und .env setzen.</p>
+          </section>
+        )}
+        {API_BASE && (
+          <>
+            <section className="card">
+              <h2>Neuer Monteur</h2>
+              <div className="form-stack" style={{ maxWidth: '24rem', marginBottom: '1rem' }}>
+                <label>Name</label>
+                <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="z. B. Max Müller" />
+                <label>Geräte-ID (optional – sonst wird eine ID erzeugt)</label>
+                <input type="text" value={deviceId} onChange={(e) => setDeviceId(e.target.value)} placeholder="z. B. monteur-01" />
+              </div>
+              <button type="button" className="btn primary" onClick={addUser}>Monteur anlegen</button>
+            </section>
+            <section className="card">
+              <h2>Monteure ({users.length})</h2>
+              {!loaded && <p className="muted">Laden…</p>}
+              {loaded && error && <p className="muted" style={{ color: 'var(--error, #b91c1c)' }}>{error}</p>}
+              {loaded && !error && users.length === 0 && <p className="muted">Noch keine Monteure angelegt. Oben einen anlegen – dann in „Projekte zuweisen“ Projekte zuordnen.</p>}
+              {loaded && !error && users.length > 0 && (
+                <ul className="list" style={{ listStyle: 'none', padding: 0 }}>
+                  {users.map((u) => (
+                    <li key={u.id} className="list-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                      <div>
+                        <strong>{u.name}</strong>
+                        <span className="muted" style={{ marginLeft: '0.5rem' }}>ID: {u.deviceId}</span>
+                      </div>
+                      <button type="button" className="btn btn-delete" onClick={() => removeUser(u)}>Entfernen</button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          </>
+        )}
+      </main>
+    </div>
+  )
+}
+
+// ========== Admin: Projekte (an Monteure zuweisen) ==========
+function ProjektePage() {
+  const [projects, setProjects] = useState([])
+  const [users, setUsers] = useState([])
+  const [loaded, setLoaded] = useState(false)
+  const [error, setError] = useState(null)
+  const [projectName, setProjectName] = useState('')
+  const [assignToUserId, setAssignToUserId] = useState('')
+
+  const load = () => {
+    if (!API_BASE) {
+      setProjects([])
+      setUsers([])
+      setLoaded(true)
+      return
+    }
+    setLoaded(false)
+    setError(null)
+    Promise.all([
+      fetch(`${API_BASE}/api/projects`).then((r) => (r.ok ? r.json() : [])),
+      fetch(`${API_BASE}/api/users`).then((r) => (r.ok ? r.json() : [])),
+    ])
+      .then(([projs, us]) => {
+        setProjects(Array.isArray(projs) ? projs : [])
+        setUsers(Array.isArray(us) ? us : [])
+        setError(null)
+      })
+      .catch((e) => {
+        setProjects([])
+        setUsers([])
+        setError(e.message)
+      })
+      .finally(() => setLoaded(true))
+  }
+
+  useEffect(load, [])
+
+  const addProject = () => {
+    const n = (projectName || '').trim() || 'Neues Projekt'
+    if (!API_BASE) return
+    fetch(`${API_BASE}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: n,
+        assignedToUserId: assignToUserId || null,
+      }),
+    })
+      .then((r) => {
+        if (!r.ok) throw new Error('Speichern fehlgeschlagen')
+        return r.json()
+      })
+      .then((newProj) => {
+        setProjects((prev) => [...prev, newProj])
+        setProjectName('')
+      })
+      .catch((e) => alert(e.message))
+  }
+
+  const setAssignment = (projectId, userId) => {
+    if (!API_BASE) return
+    fetch(`${API_BASE}/api/projects/${encodeURIComponent(projectId)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ assignedToUserId: userId || null }),
+    })
+      .then((r) => {
+        if (!r.ok) throw new Error('Aktualisieren fehlgeschlagen')
+        return r.json()
+      })
+      .then((updated) => {
+        setProjects((prev) => prev.map((p) => (p.id === updated.id ? updated : p)))
+      })
+      .catch((e) => alert(e.message))
+  }
+
+  const userName = (userId) => {
+    if (!userId) return '—'
+    const u = users.find((x) => x.id === userId)
+    return u ? u.name : userId
+  }
+
+  return (
+    <div className="page">
+      <header className="topbar">
+        <Link to="/" className="link-back">← Zurück zur Übersicht</Link>
+        <h1>Projekte zuweisen</h1>
+        <p className="subtitle">
+          Projekte anlegen und einem Monteur zuweisen. In der BauMeasurePro-App gibt der Monteur seine <strong>Geräte-ID</strong> ein und erhält nur die ihm zugewiesenen Projekte.
+        </p>
+      </header>
+      <main className="content">
+        {!API_BASE && (
+          <section className="card">
+            <p className="muted">Server (VITE_API_URL) nicht konfiguriert.</p>
+          </section>
+        )}
+        {API_BASE && (
+          <>
+            <section className="card">
+              <h2>Neues Projekt</h2>
+              <div className="form-stack" style={{ maxWidth: '24rem', marginBottom: '1rem' }}>
+                <label>Projektname</label>
+                <input type="text" value={projectName} onChange={(e) => setProjectName(e.target.value)} placeholder="z. B. Musterstraße 1" />
+                <label>Zuweisen an Monteur</label>
+                <select value={assignToUserId} onChange={(e) => setAssignToUserId(e.target.value)}>
+                  <option value="">— Keiner —</option>
+                  {users.map((u) => (
+                    <option key={u.id} value={u.id}>{u.name} ({u.deviceId})</option>
+                  ))}
+                </select>
+              </div>
+              <button type="button" className="btn primary" onClick={addProject}>Projekt anlegen</button>
+            </section>
+            <section className="card">
+              <h2>Projekte ({projects.length})</h2>
+              {!loaded && <p className="muted">Laden…</p>}
+              {loaded && error && <p className="muted" style={{ color: 'var(--error, #b91c1c)' }}>{error}</p>}
+              {loaded && !error && projects.length === 0 && <p className="muted">Noch keine Projekte. Oben ein Projekt anlegen und optional einem Monteur zuweisen.</p>}
+              {loaded && !error && projects.length > 0 && (
+                <ul className="list" style={{ listStyle: 'none', padding: 0 }}>
+                  {projects.map((p) => (
+                    <li key={p.id} className="list-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                      <div>
+                        <strong>{p.name}</strong>
+                        <span className="muted" style={{ marginLeft: '0.5rem' }}>→ {userName(p.assignedToUserId)}</span>
+                      </div>
+                      <select
+                        value={p.assignedToUserId || ''}
+                        onChange={(e) => setAssignment(p.id, e.target.value || null)}
+                        style={{ minWidth: '10rem' }}
+                      >
+                        <option value="">— Keiner —</option>
+                        {users.map((u) => (
+                          <option key={u.id} value={u.id}>{u.name}</option>
+                        ))}
+                      </select>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          </>
+        )}
+      </main>
+    </div>
+  )
+}
+
 export default function App() {
   return (
     <AuftraegeProvider>
@@ -2544,6 +2821,8 @@ export default function App() {
       <Routes>
         <Route path="/" element={<AuftragListe />} />
         <Route path="/bericht" element={<BerichtNachDatumPage />} />
+        <Route path="/monteure" element={<MonteurePage />} />
+        <Route path="/projekte" element={<ProjektePage />} />
         <Route path="/auftrag/:id" element={<AuftragDetail />} />
         <Route path="/auftrag/:id/protokoll" element={<Abschlussprotokoll />} />
       </Routes>
