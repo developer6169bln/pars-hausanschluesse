@@ -1147,14 +1147,14 @@ function AuftragListe() {
             return API_BASE ? `${API_BASE}/api/uploads/projects/${proj.id}/${encodeURIComponent(filename)}` : null
           }
           const obLabel = (m) => {
-            if (!m) return 'Ohne Angabe'
-            const v = (m.oberflaeche ?? m.oberflaecheSonstige ?? m.Oberflaeche ?? '').toString().trim()
-            return v || 'Ohne Angabe'
+            if (!m || typeof m !== 'object') return 'Ohne Angabe'
+            const v = (m.oberflaeche ?? m.oberflaecheSonstige ?? m.Oberflaeche ?? m.oberflaecheText ?? '').toString().trim()
+            return (v && v !== 'null' && v !== 'undefined') ? v : 'Ohne Angabe'
           }
           const verLabel = (m) => {
-            if (!m) return 'Ohne Angabe'
-            const v = (m.verlegeart ?? m.verlegeartSonstige ?? m.Verlegeart ?? '').toString().trim()
-            return v || 'Ohne Angabe'
+            if (!m || typeof m !== 'object') return 'Ohne Angabe'
+            const v = (m.verlegeart ?? m.verlegeartSonstige ?? m.Verlegeart ?? m.verlegeartText ?? '').toString().trim()
+            return (v && v !== 'null' && v !== 'undefined') ? v : 'Ohne Angabe'
           }
           const metersByOberflaecheVerlegeart = {}
           arMeasurements.forEach((m) => {
