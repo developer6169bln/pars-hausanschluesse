@@ -18,13 +18,15 @@ So hostest du den Auftragspool-Server bei Railway (kostenlos nutzbar). Danach br
 
 ## 3. Root-Verzeichnis, Build und Start
 
+**Hinweis:** Auf Railway läuft nur die **Admin-Web-App** (dieser Server + Frontend). Die **iOS-App (BauMeasurePro)** liegt nur als Quellcode im Repo und wird **nicht** auf Railway deployed – sie läuft auf dem iPhone über Xcode.
+
 - In der Service-Konfiguration (Settings):
   - **Root Directory:** leer lassen (Projekt-Root)
-  - **Build Command:** `npm run build` (baut das Frontend in `dist/`, damit die Startseite geliefert wird)
-  - **Start Command:** `npm run start` (startet den Server, der API + Frontend ausliefert)
+  - **Build Command:** `npm run build` (baut das Frontend in `dist/`, **wird für die Startseite benötigt**)
+  - **Start Command:** `npm run start` bzw. `node server/index.js`
   - **Watch Paths:** leer
 
-Die Datei `railway.json` setzt den Build-Befehl und **Start Command** = `node server/index.js` (direkt ohne npm, damit der Container stabil läuft). Unter **Settings → Build** prüfen: **Build Command** = `npm run build`, **Start Command** = `node server/index.js`. Optional unter **Settings → Deploy** einen **Health Check** mit Pfad `/api/health` einrichten.
+Die Datei `railway.json` setzt **Build Command** = `npm run build` und **Start Command** = `node server/index.js`. Ohne erfolgreichen Build fehlt `dist/` und die Admin-Seite zeigt nur eine Hinweisseite. **Health Check:** `/api/health` – dort siehst du `hasDist: true/false` und ob das Frontend geliefert werden kann.
 
 Railway nutzt automatisch die Variable **PORT** – der Server verwendet sie bereits.
 
@@ -99,3 +101,11 @@ Dann können alle die gleiche Auftragspool-URL nutzen, ohne lokal `npm run serve
 - **Manuell neu deployen:** Im Projekt **Deployments** → **Deploy** / **Redeploy** (oder „Trigger Deploy“), damit der letzte Stand aus dem Repo neu gebaut wird.
 - **Deploy schlägt fehl:** Unter **Deployments** den fehlgeschlagenen Deploy öffnen → **View Logs**. Dort siehst du Build- oder Runtime-Fehler (z. B. fehlende Abhängigkeiten, falscher Start-Befehl). Build Command = `npm run build`, Start Command = `node server/index.js`.
 - **GitHub-Berechtigung:** Falls Railway das Repo nicht sieht: Bei GitHub unter **Settings → Applications → Railway** prüfen, ob Railway Zugriff auf das Repository hat.
+
+## Wenn die Admin-Web-App auf Railway nicht lädt (weiße Seite / Fehler)
+
+1. **Health-Check aufrufen:** `https://deine-app.up.railway.app/api/health`  
+   - `ok: true`, `hasDist: true` → Server und Frontend-Build sind da; Fehler liegt ggf. im Frontend (Browser-Konsole prüfen).  
+   - `hasDist: false` → Der **Build** hat kein `dist/` erzeugt. Unter **Deployments** → **View Logs** den **Build**-Abschnitt prüfen: Läuft `npm run build` durch? Wenn der Build übersprungen wird oder fehlschlägt, in den Railway **Settings** **Build Command** auf `npm run build` setzen und neu deployen.
+2. **Variablen:** Unter **Variables** `VITE_API_URL` = `https://deine-app.up.railway.app` (ohne Slash). Wird beim Build eingebettet; ohne sie nutzt die App `window.location.origin` (sollte auf gleicher Domain funktionieren).
+3. **Browser-Konsole:** Bei weißer Seite F12 → Konsole. Meldungen wie „Can't find variable: React“ oder Netzwerkfehler helfen bei der Ursache.

@@ -188,11 +188,6 @@ app.post('/api/projects/:id/upload', projectUpload.single('file'), (req, res) =>
   res.status(201).json({ url, filename: req.file.filename })
 })
 
-// Health-Check für Railway (schnelle 200-Antwort)
-app.get('/api/health', (_req, res) => {
-  res.status(200).json({ ok: true })
-})
-
 app.get('/api/auftraege', (_req, res) => {
   res.json(readAuftraege())
 })
@@ -398,8 +393,18 @@ app.get('/api/mobile/assigned-projects', (req, res) => {
   res.json(assigned)
 })
 
-// Frontend (Vite-Build) ausliefern, damit Railway die App unter / anzeigt
+// Health-Check für Railway / Debug (vor static, damit es immer erreichbar ist)
 const DIST = path.join(__dirname, '..', 'dist')
+app.get('/api/health', (_req, res) => {
+  res.json({
+    ok: true,
+    hasDist: fs.existsSync(DIST),
+    dataDir: DATA_DIR,
+    message: fs.existsSync(DIST) ? 'Admin-Web-App bereit' : 'Frontend fehlt: Build Command (npm run build) auf Railway prüfen',
+  })
+})
+
+// Frontend (Vite-Build) ausliefern, damit Railway die App unter / anzeigt
 if (fs.existsSync(DIST)) {
   app.use(express.static(DIST))
   app.get('*', (_req, res) => {
@@ -407,6 +412,19 @@ if (fs.existsSync(DIST)) {
     res.sendFile(indexPath, (err) => {
       if (err && !res.headersSent) res.status(500).json({ error: 'Frontend nicht gefunden' })
     })
+  })
+} else {
+  app.get('/', (_req, res) => {
+    res.type('html').send(`
+      <!DOCTYPE html>
+      <html><head><meta charset="utf-8"><title>Admin – Setup</title></head>
+      <body style="font-family:system-ui;max-width:520px;margin:2rem auto;padding:1rem;">
+        <h1>Admin-Web-App</h1>
+        <p>Das Frontend wurde noch nicht gebaut. Im Projektordner ausführen:</p>
+        <pre style="background:#f1f5f9;padding:1rem;border-radius:8px;">npm run build\nnpm run server</pre>
+        <p>Dann diese Seite neu laden. API ist unter <a href="/api/projects">/api/projects</a> erreichbar.</p>
+      </body></html>
+    `)
   })
 }
 
