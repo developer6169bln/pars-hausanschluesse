@@ -372,7 +372,11 @@ app.patch('/api/projects/:id', (req, res) => {
   const idx = projects.findIndex((p) => String(p.id) === String(id))
   if (idx === -1) return res.status(404).json({ error: 'Projekt nicht gefunden' })
   const patch = req.body || {}
-  projects[idx] = { ...projects[idx], ...patch }
+  const updated = { ...projects[idx], ...patch }
+  if (Array.isArray(patch.measurements)) {
+    updated.measurements = patch.measurements
+  }
+  projects[idx] = updated
   writeProjects(projects)
   res.json(projects[idx])
 })
