@@ -1113,11 +1113,13 @@ function AuftragListe() {
             const filename = s.split('/').pop() || s
             return API_BASE ? `${API_BASE}/api/uploads/projects/${proj.id}/${encodeURIComponent(filename)}` : null
           }
-          const metersByOberflaeche = {}
+          const metersByOberflaecheVerlegeart = {}
           arMeasurements.forEach((m) => {
-            const key = (m.oberflaeche || m.oberflaecheSonstige || 'Ohne Angabe').trim()
+            const ob = (m.oberflaeche || m.oberflaecheSonstige || 'Ohne Angabe').trim()
+            const ver = (m.verlegeart || m.verlegeartSonstige || 'Ohne Angabe').trim()
             const val = Number(m.referenceMeters) || 0
-            metersByOberflaeche[key] = (metersByOberflaeche[key] || 0) + val
+            if (!metersByOberflaecheVerlegeart[ob]) metersByOberflaecheVerlegeart[ob] = {}
+            metersByOberflaecheVerlegeart[ob][ver] = (metersByOberflaecheVerlegeart[ob][ver] || 0) + val
           })
           const threeDScans = Array.isArray(proj.threeDScans) ? proj.threeDScans : []
           const bau = proj.bauhinderung
@@ -1181,11 +1183,21 @@ function AuftragListe() {
                 {arMeasurements.length === 0 && <p className="muted">Keine AR-Messungen.</p>}
                 {arMeasurements.length > 0 && (
                   <>
-                    <p className="muted" style={{ marginBottom: '0.5rem' }}>Gesamtmeter nach Oberfläche:</p>
-                    <ul style={{ margin: '0 0 0.5rem', paddingLeft: '1.25rem' }}>
-                      {Object.entries(metersByOberflaeche).map(([oberflaeche, sum]) => (
-                        <li key={oberflaeche}><strong>{oberflaeche}</strong>: {Number(sum).toFixed(2)} m</li>
-                      ))}
+                    <p className="muted" style={{ marginBottom: '0.5rem' }}>Gesamtmeter nach Oberfläche und Verlegeart:</p>
+                    <ul style={{ margin: '0 0 0.5rem', paddingLeft: '1.25rem', listStyle: 'none' }}>
+                      {Object.entries(metersByOberflaecheVerlegeart).map(([oberflaeche, verlegeartSums]) => {
+                        const sumOberflaeche = Object.values(verlegeartSums).reduce((a, b) => a + b, 0)
+                        return (
+                          <li key={oberflaeche} style={{ marginBottom: '0.5rem' }}>
+                            <strong>{oberflaeche}</strong>: {Number(sumOberflaeche).toFixed(2)} m
+                            <ul style={{ margin: '0.25rem 0 0 1rem', paddingLeft: '0.5rem', fontSize: '0.9rem', color: '#475569' }}>
+                              {Object.entries(verlegeartSums).map(([verlegeart, sum]) => (
+                                <li key={verlegeart}>Verlegeart: <strong>{verlegeart}</strong> — {Number(sum).toFixed(2)} m</li>
+                              ))}
+                            </ul>
+                          </li>
+                        )
+                      })}
                     </ul>
                     <p className="muted">Summe AR: {arMeasurements.reduce((s, m) => s + (Number(m.referenceMeters) || 0), 0).toFixed(2)} m</p>
                   </>
