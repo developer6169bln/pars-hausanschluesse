@@ -741,9 +741,9 @@ function AuftragListe() {
   const summeGesamt = summeOffen + summeAbgeschlossen
 
   const [fotoViewer, setFotoViewer] = useState({ open: false, fotos: [], currentIndex: 0 })
-  const openFotos = (fotos) => {
+  const openFotos = (fotos, initialIndex = 0) => {
     if (!fotos?.length) return
-    setFotoViewer({ open: true, fotos, currentIndex: 0 })
+    setFotoViewer({ open: true, fotos, currentIndex: Math.min(initialIndex, fotos.length - 1) })
   }
   const closeFotos = () => setFotoViewer((v) => ({ ...v, open: false }))
   const nextFoto = () =>
@@ -1197,23 +1197,44 @@ function AuftragListe() {
 
                 <h3 className="project-detail-section">Messungen & Fotos</h3>
                 {measurements.length === 0 && <p className="muted">Keine Messungen oder Fotos.</p>}
-                {measurements.length > 0 && (
-                  <div className="project-measurements-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '0.5rem', marginBottom: '1rem' }}>
-                    {measurements.map((m, idx) => {
-                      const imgUrl = projectAssetUrl(m.imagePath || m.imageUrl)
-                      const label = m.isARMeasurement ? `Messung ${(m.index != null ? m.index : idx + 1)}` : `Foto ${(m.index != null ? m.index : idx + 1)}`
-                      return (
-                        <div key={m.id || idx} style={{ border: '1px solid #e2e8f0', borderRadius: '0.5rem', overflow: 'hidden' }}>
-                          {imgUrl ? <img src={imgUrl} alt={label} style={{ width: '100%', height: 100, objectFit: 'cover' }} onError={(e) => { e.target.style.display = 'none' }} /> : <div style={{ height: 100, background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', color: '#94a3b8' }}>Kein Bild</div>}
-                          <div style={{ padding: '0.35rem 0.5rem', fontSize: '0.8rem' }}>
-                            <strong>{label}</strong>
-                            {m.referenceMeters != null && <span className="muted"> · {Number(m.referenceMeters).toFixed(2)} m</span>}
+                {measurements.length > 0 && (() => {
+                  const photoList = measurements.map((m) => projectAssetUrl(m.imagePath || m.imageUrl)).filter(Boolean).map((url) => ({ url }))
+                  return (
+                    <div className="project-measurements-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '0.5rem', marginBottom: '1rem' }}>
+                      {measurements.map((m, idx) => {
+                        const imgUrl = projectAssetUrl(m.imagePath || m.imageUrl)
+                        const label = m.isARMeasurement ? `Messung ${(m.index != null ? m.index : idx + 1)}` : `Foto ${(m.index != null ? m.index : idx + 1)}`
+                        const photoIndex = measurements.slice(0, idx).filter((x) => projectAssetUrl(x.imagePath || x.imageUrl)).length
+                        return (
+                          <div key={m.id || idx} style={{ border: '1px solid #e2e8f0', borderRadius: '0.5rem', overflow: 'hidden' }}>
+                            {imgUrl ? (
+                              <div
+                                style={{ position: 'relative', cursor: 'pointer' }}
+                                onClick={() => openFotos(photoList, photoIndex)}
+                                role="button"
+                                tabIndex={0}
+                                onKeyDown={(e) => e.key === 'Enter' && openFotos(photoList, photoIndex)}
+                                aria-label={`${label} ansehen`}
+                              >
+                                <img src={imgUrl} alt={label} style={{ width: '100%', height: 100, objectFit: 'cover', display: 'block' }} onError={(e) => { e.target.style.display = 'none' }} />
+                                <span style={{ position: 'absolute', bottom: 4, left: 4, right: 4, background: 'rgba(0,0,0,0.6)', color: '#fff', fontSize: '0.7rem', padding: '2px 6px', borderRadius: 4 }}>Ansehen</span>
+                              </div>
+                            ) : (
+                              <div style={{ height: 100, background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', color: '#94a3b8' }}>Kein Bild</div>
+                            )}
+                            <div style={{ padding: '0.35rem 0.5rem', fontSize: '0.8rem', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.35rem' }}>
+                              <strong>{label}</strong>
+                              {m.referenceMeters != null && <span className="muted">· {Number(m.referenceMeters).toFixed(2)} m</span>}
+                              {imgUrl && (
+                                <a href={imgUrl} target="_blank" rel="noopener noreferrer" download style={{ marginLeft: 'auto', fontSize: '0.75rem' }}>Download</a>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
+                        )
+                      })}
+                    </div>
+                  )
+                })()}
 
                 <h3 className="project-detail-section">AR-Messungen & Meter nach Bodenart</h3>
                 {arMeasurements.length === 0 && <p className="muted">Keine AR-Messungen.</p>}
@@ -1277,7 +1298,20 @@ function AuftragListe() {
                     {proj.abnahmeOhneMaengel != null && <p><strong>Ohne Mängel:</strong> {proj.abnahmeOhneMaengel ? 'Ja' : 'Nein'}</p>}
                     {proj.abnahmeMaengelText && <p><strong>Mängel / Anmerkungen:</strong> {proj.abnahmeMaengelText}</p>}
                     {proj.abnahmeProtokollDatum && <p className="muted">Datum: {new Date(proj.abnahmeProtokollDatum).toLocaleDateString('de-DE')}</p>}
-                    {projectAssetUrl(proj.abnahmeProtokollUnterschriftPath) && <img src={projectAssetUrl(proj.abnahmeProtokollUnterschriftPath)} alt="Unterschrift" style={{ maxWidth: 200, border: '1px solid #e2e8f0', borderRadius: 4 }} />}
+                    {projectAssetUrl(proj.abnahmeProtokollUnterschriftPath) && (
+                      <div>
+                        <img
+                          src={projectAssetUrl(proj.abnahmeProtokollUnterschriftPath)}
+                          alt="Unterschrift"
+                          style={{ maxWidth: 200, border: '1px solid #e2e8f0', borderRadius: 4, cursor: 'pointer' }}
+                          onClick={() => openFotos([{ url: projectAssetUrl(proj.abnahmeProtokollUnterschriftPath) }])}
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={(e) => e.key === 'Enter' && openFotos([{ url: projectAssetUrl(proj.abnahmeProtokollUnterschriftPath) }])}
+                        />
+                        <a href={projectAssetUrl(proj.abnahmeProtokollUnterschriftPath)} target="_blank" rel="noopener noreferrer" download style={{ display: 'inline-block', marginTop: '0.25rem', fontSize: '0.85rem' }}>Download</a>
+                      </div>
+                    )}
                   </div>
                 ) : <p className="muted">Kein Abnahmeprotokoll.</p>}
 
@@ -1291,7 +1325,20 @@ function AuftragListe() {
                     {(bau.kundeNichtAnwesend || bau.keinZugangGrundstueck || bau.arbeitenNichtBegonnen || bau.neuerTerminNoetig) && (
                       <p><strong>Ergebnis:</strong> {[bau.kundeNichtAnwesend && 'Kunde nicht anwesend', bau.keinZugangGrundstueck && 'Kein Zugang', bau.arbeitenNichtBegonnen && 'Arbeiten nicht begonnen', bau.neuerTerminNoetig && 'Neuer Termin nötig'].filter(Boolean).join(', ')}</p>
                     )}
-                    {bau.unterschriftPath && projectAssetUrl(bau.unterschriftPath) && <img src={projectAssetUrl(bau.unterschriftPath)} alt="Unterschrift Bauhinderung" style={{ maxWidth: 200, border: '1px solid #e2e8f0', borderRadius: 4 }} />}
+                    {bau.unterschriftPath && projectAssetUrl(bau.unterschriftPath) && (
+                      <div>
+                        <img
+                          src={projectAssetUrl(bau.unterschriftPath)}
+                          alt="Unterschrift Bauhinderung"
+                          style={{ maxWidth: 200, border: '1px solid #e2e8f0', borderRadius: 4, cursor: 'pointer' }}
+                          onClick={() => openFotos([{ url: projectAssetUrl(bau.unterschriftPath) }])}
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={(e) => e.key === 'Enter' && openFotos([{ url: projectAssetUrl(bau.unterschriftPath) }])}
+                        />
+                        <a href={projectAssetUrl(bau.unterschriftPath)} target="_blank" rel="noopener noreferrer" download style={{ display: 'inline-block', marginTop: '0.25rem', fontSize: '0.85rem' }}>Download</a>
+                      </div>
+                    )}
                   </div>
                 ) : <p className="muted">Keine Bauhinderungsmeldung.</p>}
 
@@ -1325,11 +1372,14 @@ function AuftragListe() {
               </button>
             )}
           </div>
-          {fotoViewer.fotos.length > 1 && (
-            <p className="foto-lightbox-counter">
-              {fotoViewer.currentIndex + 1} / {fotoViewer.fotos.length}
-            </p>
-          )}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem', marginTop: '0.5rem' }}>
+            {fotoViewer.fotos.length > 1 && (
+              <p className="foto-lightbox-counter" style={{ margin: 0 }}>
+                {fotoViewer.currentIndex + 1} / {fotoViewer.fotos.length}
+              </p>
+            )}
+            <a href={getAttachmentSrc(fotoViewer.fotos[fotoViewer.currentIndex])} target="_blank" rel="noopener noreferrer" download className="btn ghost" style={{ fontSize: '0.9rem' }}>Download</a>
+          </div>
         </div>
       )}
 
