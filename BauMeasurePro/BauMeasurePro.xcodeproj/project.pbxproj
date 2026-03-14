@@ -1,0 +1,463 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		BM01A12F60000100000001 /* BauMeasureProApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BM01B12F60000100000001 /* BauMeasureProApp.swift */; };
+		BM01A22F60000100000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BM01B22F60000100000002 /* ContentView.swift */; };
+		BM01A32F60000100000003 /* Measurement.swift in Sources */ = {isa = PBXBuildFile; fileRef = BM01B32F60000100000003 /* Measurement.swift */; };
+		BM01A42F60000100000004 /* PhotoPoint.swift in Sources */ = {isa = PBXBuildFile; fileRef = BM01B42F60000100000004 /* PhotoPoint.swift */; };
+		BM01A52F60000100000005 /* Project.swift in Sources */ = {isa = PBXBuildFile; fileRef = BM01B52F60000100000005 /* Project.swift */; };
+		BM01OP2F60000100000017 /* ProjectOptions.swift in Sources */ = {isa = PBXBuildFile; fileRef = BM01OQ2F60000100000018 /* ProjectOptions.swift */; };
+		BM01A62F60000100000006 /* MapViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BM01B62F60000100000006 /* MapViewModel.swift */; };
+		BM01A72F60000100000007 /* MeasurementViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BM01B72F60000100000007 /* MeasurementViewModel.swift */; };
+		BM01A82F60000100000008 /* CameraViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BM01B82F60000100000008 /* CameraViewModel.swift */; };
+		BM01A92F60000100000009 /* LocationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BM01B92F60000100000009 /* LocationService.swift */; };
+		BM01AA2F6000010000000A /* CameraService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BM01BA2F6000010000000A /* CameraService.swift */; };
+		BM01AB2F6000010000000B /* StorageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BM01BB2F6000010000000B /* StorageService.swift */; };
+		BM01AC2F6000010000000C /* PDFService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BM01BC2F6000010000000C /* PDFService.swift */; };
+		BM01AP2F60000100000015 /* PhotoLibraryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BM01BP2F60000100000016 /* PhotoLibraryService.swift */; };
+		BM01AD2F6000010000000D /* MapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BM01BD2F6000010000000D /* MapView.swift */; };
+		BM01AE2F6000010000000E /* CameraView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BM01BE2F6000010000000E /* CameraView.swift */; };
+		BM01AF2F6000010000000F /* ARMeasureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BM01BF2F6000010000000F /* ARMeasureView.swift */; };
+		BM01B02F60000100000010 /* PhotoMeasureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BM01C02F60000100000010 /* PhotoMeasureView.swift */; };
+		BM01B12F60000100000011 /* MeasurementDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BM01C12F60000100000011 /* MeasurementDetailView.swift */; };
+		BM01R12F60000100000001 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = BM01C42F60000100000014 /* Assets.xcassets */; };
+		BM01I12F60000100000001 /* ImagePicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = BM01I22F60000100000002 /* ImagePicker.swift */; };
+		BM01P12F60000100000001 /* AddPhotoSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BM01P22F60000100000002 /* AddPhotoSheetView.swift */; };
+		BM01P32F60000100000003 /* ProjectDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BM01P42F60000100000004 /* ProjectDetailView.swift */; };
+		BM01S12F60000100000001 /* ShareSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = BM01S22F60000100000002 /* ShareSheet.swift */; };
+		BM01M12F60000100000001 /* ARMeshScanView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BM01M22F60000100000002 /* ARMeshScanView.swift */; };
+		BM01M32F60000100000003 /* SCNGeometry+ARMeshAnchor.swift in Sources */ = {isa = PBXBuildFile; fileRef = BM01M42F60000100000004 /* SCNGeometry+ARMeshAnchor.swift */; };
+		BM01OS1F60000100000001 /* OpenStreetMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BM01OS2F60000100000002 /* OpenStreetMapView.swift */; };
+		BM01AS1F60000100000001 /* AssignedProjectsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BM01AS2F60000100000001 /* AssignedProjectsService.swift */; };
+		BM01DS1F60000100000001 /* DeviceIdSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BM01DS2F60000100000001 /* DeviceIdSettingsView.swift */; };
+		BM01SY1F60000100000001 /* ProjectSyncService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BM01SY2F60000100000001 /* ProjectSyncService.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		BM01B12F60000100000001 /* BauMeasureProApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BauMeasureProApp.swift; sourceTree = "<group>"; };
+		BM01B22F60000100000002 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		BM01B32F60000100000003 /* Measurement.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Measurement.swift; sourceTree = "<group>"; };
+		BM01B42F60000100000004 /* PhotoPoint.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoPoint.swift; sourceTree = "<group>"; };
+		BM01B52F60000100000005 /* Project.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Project.swift; sourceTree = "<group>"; };
+		BM01OQ2F60000100000018 /* ProjectOptions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectOptions.swift; sourceTree = "<group>"; };
+		BM01B62F60000100000006 /* MapViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapViewModel.swift; sourceTree = "<group>"; };
+		BM01B72F60000100000007 /* MeasurementViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeasurementViewModel.swift; sourceTree = "<group>"; };
+		BM01B82F60000100000008 /* CameraViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraViewModel.swift; sourceTree = "<group>"; };
+		BM01B92F60000100000009 /* LocationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationService.swift; sourceTree = "<group>"; };
+		BM01BA2F6000010000000A /* CameraService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraService.swift; sourceTree = "<group>"; };
+		BM01BB2F6000010000000B /* StorageService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageService.swift; sourceTree = "<group>"; };
+		BM01BC2F6000010000000C /* PDFService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFService.swift; sourceTree = "<group>"; };
+		BM01BP2F60000100000016 /* PhotoLibraryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoLibraryService.swift; sourceTree = "<group>"; };
+		BM01BD2F6000010000000D /* MapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapView.swift; sourceTree = "<group>"; };
+		BM01BE2F6000010000000E /* CameraView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraView.swift; sourceTree = "<group>"; };
+		BM01BF2F6000010000000F /* ARMeasureView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ARMeasureView.swift; sourceTree = "<group>"; };
+		BM01C02F60000100000010 /* PhotoMeasureView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoMeasureView.swift; sourceTree = "<group>"; };
+		BM01C12F60000100000011 /* MeasurementDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeasurementDetailView.swift; sourceTree = "<group>"; };
+		BM01C22F60000100000012 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		BM01C32F60000100000013 /* BauMeasurePro.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BauMeasurePro.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		BM01C42F60000100000014 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		BM01I22F60000100000002 /* ImagePicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImagePicker.swift; sourceTree = "<group>"; };
+		BM01P22F60000100000002 /* AddPhotoSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddPhotoSheetView.swift; sourceTree = "<group>"; };
+		BM01P42F60000100000004 /* ProjectDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectDetailView.swift; sourceTree = "<group>"; };
+		BM01S22F60000100000002 /* ShareSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareSheet.swift; sourceTree = "<group>"; };
+		BM01M22F60000100000002 /* ARMeshScanView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ARMeshScanView.swift; sourceTree = "<group>"; };
+		BM01M42F60000100000004 /* SCNGeometry+ARMeshAnchor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SCNGeometry+ARMeshAnchor.swift"; sourceTree = "<group>"; };
+		BM01OS2F60000100000002 /* OpenStreetMapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenStreetMapView.swift; sourceTree = "<group>"; };
+		BM01AS2F60000100000001 /* AssignedProjectsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssignedProjectsService.swift; sourceTree = "<group>"; };
+		BM01DS2F60000100000001 /* DeviceIdSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceIdSettingsView.swift; sourceTree = "<group>"; };
+		BM01SY2F60000100000001 /* ProjectSyncService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectSyncService.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		BM01D12F60000100000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		BM01E12F60000100000001 = {
+			isa = PBXGroup;
+			children = (
+				BM01E22F60000100000002 /* BauMeasurePro */,
+				BM01E32F60000100000003 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		BM01E22F60000100000002 /* BauMeasurePro */ = {
+			isa = PBXGroup;
+			children = (
+				BM01E42F60000100000004 /* App */,
+				BM01E52F60000100000005 /* Models */,
+				BM01E62F60000100000006 /* ViewModels */,
+				BM01E72F60000100000007 /* Services */,
+				BM01E82F60000100000008 /* Views */,
+				BM01M52F60000100000005 /* Extensions */,
+				BM01E92F60000100000009 /* Resources */,
+			);
+			path = BauMeasurePro;
+			sourceTree = "<group>";
+		};
+		BM01M52F60000100000005 /* Extensions */ = {
+			isa = PBXGroup;
+			children = (
+				BM01M42F60000100000004 /* SCNGeometry+ARMeshAnchor.swift */,
+			);
+			path = Extensions;
+			sourceTree = "<group>";
+		};
+		BM01E32F60000100000003 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				BM01C32F60000100000013 /* BauMeasurePro.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		BM01E42F60000100000004 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				BM01B12F60000100000001 /* BauMeasureProApp.swift */,
+				BM01B22F60000100000002 /* ContentView.swift */,
+				BM01P22F60000100000002 /* AddPhotoSheetView.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		BM01E52F60000100000005 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				BM01B32F60000100000003 /* Measurement.swift */,
+				BM01B42F60000100000004 /* PhotoPoint.swift */,
+				BM01B52F60000100000005 /* Project.swift */,
+				BM01OQ2F60000100000018 /* ProjectOptions.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		BM01E62F60000100000006 /* ViewModels */ = {
+			isa = PBXGroup;
+			children = (
+				BM01B62F60000100000006 /* MapViewModel.swift */,
+				BM01B72F60000100000007 /* MeasurementViewModel.swift */,
+				BM01B82F60000100000008 /* CameraViewModel.swift */,
+			);
+			path = ViewModels;
+			sourceTree = "<group>";
+		};
+		BM01E72F60000100000007 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				BM01AS2F60000100000001 /* AssignedProjectsService.swift */,
+				BM01B92F60000100000009 /* LocationService.swift */,
+				BM01BA2F6000010000000A /* CameraService.swift */,
+				BM01BB2F6000010000000B /* StorageService.swift */,
+				BM01SY2F60000100000001 /* ProjectSyncService.swift */,
+				BM01BC2F6000010000000C /* PDFService.swift */,
+				BM01BP2F60000100000016 /* PhotoLibraryService.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		BM01E82F60000100000008 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				BM01EA2F6000010000000A /* Map */,
+				BM01EB2F6000010000000B /* Camera */,
+				BM01EC2F6000010000000C /* Measurement */,
+				BM01ED2F6000010000000D /* Detail */,
+				BM01SG2F60000100000001 /* Settings */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		BM01SG2F60000100000001 /* Settings */ = {
+			isa = PBXGroup;
+			children = (
+				BM01DS2F60000100000001 /* DeviceIdSettingsView.swift */,
+			);
+			path = Settings;
+			sourceTree = "<group>";
+		};
+		BM01E92F60000100000009 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				BM01C22F60000100000012 /* Info.plist */,
+				BM01C42F60000100000014 /* Assets.xcassets */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		BM01EA2F6000010000000A /* Map */ = {
+			isa = PBXGroup;
+			children = (
+				BM01BD2F6000010000000D /* MapView.swift */,
+				BM01OS2F60000100000002 /* OpenStreetMapView.swift */,
+			);
+			path = Map;
+			sourceTree = "<group>";
+		};
+		BM01EB2F6000010000000B /* Camera */ = {
+			isa = PBXGroup;
+			children = (
+				BM01BE2F6000010000000E /* CameraView.swift */,
+				BM01I22F60000100000002 /* ImagePicker.swift */,
+			);
+			path = Camera;
+			sourceTree = "<group>";
+		};
+		BM01EC2F6000010000000C /* Measurement */ = {
+			isa = PBXGroup;
+			children = (
+				BM01BF2F6000010000000F /* ARMeasureView.swift */,
+				BM01M22F60000100000002 /* ARMeshScanView.swift */,
+				BM01C02F60000100000010 /* PhotoMeasureView.swift */,
+			);
+			path = Measurement;
+			sourceTree = "<group>";
+		};
+		BM01ED2F6000010000000D /* Detail */ = {
+			isa = PBXGroup;
+			children = (
+				BM01C12F60000100000011 /* MeasurementDetailView.swift */,
+				BM01P42F60000100000004 /* ProjectDetailView.swift */,
+				BM01S22F60000100000002 /* ShareSheet.swift */,
+			);
+			path = Detail;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		BM01F12F60000100000001 /* BauMeasurePro */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = BM01G22F60000100000002 /* Build configuration list for PBXNativeTarget "BauMeasurePro" */;
+			buildPhases = (
+				BM01F22F60000100000001 /* Sources */,
+				BM01D12F60000100000001 /* Frameworks */,
+				BM01F32F60000100000001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = BauMeasurePro;
+			productName = BauMeasurePro;
+			productReference = BM01C32F60000100000013 /* BauMeasurePro.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		BM01E12F60000100000000 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1500;
+				LastUpgradeCheck = 1500;
+			};
+			buildConfigurationList = BM01G12F60000100000001 /* Build configuration list for PBXProject "BauMeasurePro" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = de;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				de,
+				Base,
+			);
+			mainGroup = BM01E12F60000100000001;
+			productRefGroup = BM01E32F60000100000003 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				BM01F12F60000100000001 /* BauMeasurePro */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		BM01F32F60000100000001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BM01R12F60000100000001 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		BM01F22F60000100000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BM01A12F60000100000001 /* BauMeasureProApp.swift in Sources */,
+				BM01A22F60000100000002 /* ContentView.swift in Sources */,
+				BM01A32F60000100000003 /* Measurement.swift in Sources */,
+				BM01A42F60000100000004 /* PhotoPoint.swift in Sources */,
+				BM01A52F60000100000005 /* Project.swift in Sources */,
+				BM01OP2F60000100000017 /* ProjectOptions.swift in Sources */,
+				BM01A62F60000100000006 /* MapViewModel.swift in Sources */,
+				BM01A72F60000100000007 /* MeasurementViewModel.swift in Sources */,
+				BM01A82F60000100000008 /* CameraViewModel.swift in Sources */,
+				BM01A92F60000100000009 /* LocationService.swift in Sources */,
+				BM01AA2F6000010000000A /* CameraService.swift in Sources */,
+				BM01AB2F6000010000000B /* StorageService.swift in Sources */,
+				BM01AC2F6000010000000C /* PDFService.swift in Sources */,
+				BM01AP2F60000100000015 /* PhotoLibraryService.swift in Sources */,
+				BM01AD2F6000010000000D /* MapView.swift in Sources */,
+				BM01AE2F6000010000000E /* CameraView.swift in Sources */,
+				BM01I12F60000100000001 /* ImagePicker.swift in Sources */,
+				BM01AF2F6000010000000F /* ARMeasureView.swift in Sources */,
+				BM01B02F60000100000010 /* PhotoMeasureView.swift in Sources */,
+				BM01B12F60000100000011 /* MeasurementDetailView.swift in Sources */,
+				BM01P12F60000100000001 /* AddPhotoSheetView.swift in Sources */,
+				BM01P32F60000100000003 /* ProjectDetailView.swift in Sources */,
+				BM01S12F60000100000001 /* ShareSheet.swift in Sources */,
+				BM01M12F60000100000001 /* ARMeshScanView.swift in Sources */,
+				BM01M32F60000100000003 /* SCNGeometry+ARMeshAnchor.swift in Sources */,
+				BM01OS1F60000100000001 /* OpenStreetMapView.swift in Sources */,
+				BM01AS1F60000100000001 /* AssignedProjectsService.swift in Sources */,
+				BM01DS1F60000100000001 /* DeviceIdSettingsView.swift in Sources */,
+				BM01SY1F60000100000001 /* ProjectSyncService.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		BM01H12F60000100000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		BM01H22F60000100000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		BM01H32F60000100000003 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = FRNMD552FQ;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = BauMeasurePro/Resources/Info.plist;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Kamera für Foto-Messungen und AR-Messung.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Standort für Adresse und Kartenmarkierung der Messung.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Fotos für Messungen auswählen.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = de.parsbau.BauMeasurePro;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		BM01H42F60000100000004 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = FRNMD552FQ;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = BauMeasurePro/Resources/Info.plist;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Kamera für Foto-Messungen und AR-Messung.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Standort für Adresse und Kartenmarkierung der Messung.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Fotos für Messungen auswählen.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = de.parsbau.BauMeasurePro;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		BM01G12F60000100000001 /* Build configuration list for PBXProject "BauMeasurePro" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BM01H12F60000100000001 /* Debug */,
+				BM01H22F60000100000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		BM01G22F60000100000002 /* Build configuration list for PBXNativeTarget "BauMeasurePro" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BM01H32F60000100000003 /* Debug */,
+				BM01H42F60000100000004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = BM01E12F60000100000000 /* Project object */;
+}
