@@ -534,7 +534,9 @@ function AuftragListe() {
     uebersichtsplanDownloadUrl: '',
   })
   const [importVorschau, setImportVorschau] = useState([])
-  const [showNeuerAuftragForm, setShowNeuerAuftragForm] = useState(false)
+  const [projects, setProjects] = useState([])
+  const [users, setUsers] = useState([])
+  const [projectsLoaded, setProjectsLoaded] = useState(false)
   const [standortStatus, setStandortStatus] = useState('') // '' | 'loading' | 'ok' | 'error'
   const [ortsanwesenheitStatus, setOrtsanwesenheitStatus] = useState('') // '' | 'loading' | 'ok' | 'error'
   const [formFotoHinweis, setFormFotoHinweis] = useState('')
@@ -667,6 +669,35 @@ function AuftragListe() {
         ))}
       </div>
     )
+  }
+
+  useEffect(() => {
+    if (!API_BASE) {
+      setProjects([])
+      setUsers([])
+      setProjectsLoaded(true)
+      return
+    }
+    setProjectsLoaded(false)
+    Promise.all([
+      fetch(`${API_BASE}/api/projects`).then((r) => (r.ok ? r.json() : [])),
+      fetch(`${API_BASE}/api/users`).then((r) => (r.ok ? r.json() : [])),
+    ])
+      .then(([projs, us]) => {
+        setProjects(Array.isArray(projs) ? projs : [])
+        setUsers(Array.isArray(us) ? us : [])
+      })
+      .catch(() => {
+        setProjects([])
+        setUsers([])
+      })
+      .finally(() => setProjectsLoaded(true))
+  }, [API_BASE])
+
+  const projectUserName = (userId) => {
+    if (!userId) return '—'
+    const u = users.find((x) => x.id === userId)
+    return u ? u.name : userId
   }
 
   const offeneAuftraege = sortByTermin(auftraege.filter((a) => !isAbgeschlossen(a)))
@@ -1017,368 +1048,30 @@ function AuftragListe() {
       </header>
 
       <main className="content">
-        {!showNeuerAuftragForm ? (
+        {API_BASE && (
           <section className="card">
-            <button
-              type="button"
-              className="btn primary"
-              onClick={() => setShowNeuerAuftragForm(true)}
-              style={{ fontSize: '1rem', padding: '0.6rem 1.25rem' }}
-            >
-              + Neuer Auftrag
-            </button>
-            <p className="muted" style={{ marginTop: '0.5rem', marginBottom: 0 }}>
-              Klicken, um einen neuen Auftrag zu erfassen. Nach dem Speichern gelangen Sie zurück zur Übersicht.
+            <h2>Projekte (App-Zuweisung)</h2>
+            <p className="muted" style={{ marginTop: '-0.25rem', marginBottom: '0.75rem' }}>
+              In „Projekte zuweisen“ angelegte und zugewiesene Projekte – für die BauMeasurePro-App.
+            </p>
+            {!projectsLoaded && <p className="muted">Laden…</p>}
+            {projectsLoaded && projects.length === 0 && <p className="muted">Noch keine Projekte. Unter „Projekte zuweisen“ anlegen und einem Monteur zuweisen.</p>}
+            {projectsLoaded && projects.length > 0 && (
+              <ul className="list" style={{ listStyle: 'none', padding: 0 }}>
+                {projects.map((p) => (
+                  <li key={p.id} style={{ padding: '0.5rem 0', borderBottom: '1px solid #e2e8f0' }}>
+                    <strong>{p.name}</strong>
+                    <span className="muted" style={{ marginLeft: '0.5rem' }}>
+                      → Zugewiesen an: {p.assignedToUserId ? projectUserName(p.assignedToUserId) : '—'}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p style={{ marginTop: '0.75rem', marginBottom: 0 }}>
+              <Link to="/projekte" className="btn ghost" style={{ fontSize: '0.9rem' }}>Projekte zuweisen →</Link>
             </p>
           </section>
-        ) : (
-        <section className="card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1rem' }}>
-            <h2 style={{ margin: 0 }}>Neuer Auftrag</h2>
-            <button type="button" className="btn ghost" onClick={() => setShowNeuerAuftragForm(false)}>
-              Abbrechen
-            </button>
-          </div>
-          <div className="form-stack">
-            <label>
-              Straße *
-              <input
-                type="text"
-                value={form.strasse}
-                onChange={(e) => setForm((f) => ({ ...f, strasse: e.target.value }))}
-                placeholder="z. B. Musterstraße"
-                autoComplete="address-line1"
-              />
-            </label>
-            <label>
-              Hausnummer *
-              <input
-                type="text"
-                value={form.hausnummer}
-                onChange={(e) => setForm((f) => ({ ...f, hausnummer: e.target.value }))}
-                placeholder="z. B. 12 oder 12a"
-                inputMode="numeric"
-                autoComplete="address-line2"
-              />
-            </label>
-            <label>
-              PLZ
-              <input
-                type="text"
-                value={form.plz}
-                onChange={(e) => setForm((f) => ({ ...f, plz: e.target.value }))}
-                placeholder="Postleitzahl"
-                inputMode="numeric"
-                autoComplete="postal-code"
-              />
-            </label>
-            <label>
-              Ort
-              <input
-                type="text"
-                value={form.ort}
-                onChange={(e) => setForm((f) => ({ ...f, ort: e.target.value }))}
-                placeholder="Ort"
-                autoComplete="address-level2"
-              />
-            </label>
-            <label>
-              Kontakt Name
-              <input
-                type="text"
-                value={form.kontaktName}
-                onChange={(e) => setForm((f) => ({ ...f, kontaktName: e.target.value }))}
-                placeholder="Name des Ansprechpartners"
-                autoComplete="name"
-              />
-            </label>
-            <label>
-              Telefon
-              <input
-                type="tel"
-                value={form.telefon}
-                onChange={(e) => setForm((f) => ({ ...f, telefon: e.target.value }))}
-                placeholder="+49 …"
-                inputMode="tel"
-                autoComplete="tel"
-              />
-            </label>
-            <label>
-              NVT
-              <input
-                type="text"
-                value={form.nvt}
-                onChange={(e) => setForm((f) => ({ ...f, nvt: e.target.value }))}
-                placeholder="NVT"
-              />
-            </label>
-            <label>
-              Termin (Datum & Uhrzeit)
-              <input
-                type="datetime-local"
-                value={form.termin}
-                onChange={(e) => setForm((f) => ({ ...f, termin: e.target.value }))}
-              />
-            </label>
-            <label>
-              Verbund Größe
-              <select
-                value={form.verbundGroesse}
-                onChange={(e) => setForm((f) => ({ ...f, verbundGroesse: e.target.value }))}
-              >
-                <option value="">—</option>
-                <option value="22x7">22x7</option>
-                <option value="8x7">8x7</option>
-                <option value="12x7">12x7</option>
-              </select>
-            </label>
-            <label>
-              Verbund Farbe
-              <div className="select-with-swatch">
-                <select
-                  value={form.verbundFarbe}
-                  onChange={(e) => setForm((f) => ({ ...f, verbundFarbe: e.target.value }))}
-                >
-                  <option value="">—</option>
-                  <option value="Orange">Orange</option>
-                  <option value="Orange/Schwarz">Orange/Schwarz</option>
-                  <option value="Orange/Weiß">Orange/Weiß</option>
-                  <option value="Orange/Rot">Orange/Rot</option>
-                </select>
-                {form.verbundFarbe.includes('/') ? (
-                  <ColorPair left={form.verbundFarbe.split('/')[0]} right={form.verbundFarbe.split('/')[1]} />
-                ) : (
-                  <ColorSwatch name={form.verbundFarbe} />
-                )}
-              </div>
-            </label>
-            <label>
-              Pipes Farbe (Kombination)
-              <div className="pipes-row">
-                <div className="select-with-swatch">
-                  <select
-                    value={form.pipesFarbe1}
-                    onChange={(e) => setForm((f) => ({ ...f, pipesFarbe1: e.target.value }))}
-                  >
-                    <option value="">—</option>
-                    <option value="rot">rot</option>
-                    <option value="grün">grün</option>
-                    <option value="blau">blau</option>
-                    <option value="gelb">gelb</option>
-                    <option value="weiß">weiß</option>
-                    <option value="grau">grau</option>
-                    <option value="braun">braun</option>
-                    <option value="violett">violett</option>
-                    <option value="türkis">türkis</option>
-                    <option value="schwarz">schwarz</option>
-                    <option value="orange">orange</option>
-                    <option value="rosa">rosa</option>
-                  </select>
-                  <ColorSwatch name={form.pipesFarbe1} />
-                </div>
-                <div className="select-with-swatch">
-                  <select
-                    value={form.pipesFarbe2}
-                    onChange={(e) => setForm((f) => ({ ...f, pipesFarbe2: e.target.value }))}
-                  >
-                    <option value="">—</option>
-                    <option value="rot">rot</option>
-                    <option value="grün">grün</option>
-                    <option value="blau">blau</option>
-                    <option value="gelb">gelb</option>
-                    <option value="weiß">weiß</option>
-                    <option value="grau">grau</option>
-                    <option value="braun">braun</option>
-                    <option value="violett">violett</option>
-                    <option value="türkis">türkis</option>
-                    <option value="schwarz">schwarz</option>
-                    <option value="orange">orange</option>
-                    <option value="rosa">rosa</option>
-                  </select>
-                  <ColorSwatch name={form.pipesFarbe2 || form.pipesFarbe1} />
-                </div>
-                <ColorPair left={form.pipesFarbe1} right={form.pipesFarbe2 || form.pipesFarbe1} />
-              </div>
-            </label>
-            <label>
-              Standort (GPS)
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
-                <button
-                  className="btn ghost"
-                  type="button"
-                  onClick={standortSpeichern}
-                  disabled={!('geolocation' in navigator) || standortStatus === 'loading'}
-                >
-                  {standortStatus === 'loading' ? 'Wird ermittelt…' : 'Standort speichern'}
-                </button>
-                <span className="muted" style={{ fontSize: '0.9rem' }}>
-                  {form.standort
-                    ? `${form.standort.lat.toFixed(6)}, ${form.standort.lng.toFixed(6)} (±${Math.round(form.standort.accuracy)} m)`
-                    : '—'}
-                </span>
-                {standortStatus === 'ok' && <span className="standort-ok">Standort übernommen.</span>}
-                {standortStatus === 'error' && (
-                  <span className="standort-error">{GEO_ERROR_HINT}</span>
-                )}
-              </div>
-              <p className="muted" style={{ marginTop: '0.35rem', fontSize: '0.8rem' }}>
-                Beim ersten Klick fragt der Browser nach der Standortberechtigung. iOS: nur nach Tippen auf den Button; Seite über HTTPS aufrufen (localhost geht auch).
-              </p>
-            </label>
-            <label>
-              Ortsanwesenheit (Standort + Uhrzeit)
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
-                <button
-                  className="btn ghost"
-                  type="button"
-                  onClick={ortsanwesenheitErfassen}
-                  disabled={!('geolocation' in navigator) || ortsanwesenheitStatus === 'loading'}
-                >
-                  {ortsanwesenheitStatus === 'loading' ? 'Wird erfasst…' : 'Ortsanwesenheit jetzt erfassen'}
-                </button>
-                <span className="muted" style={{ fontSize: '0.9rem' }}>
-                  {form.ortsanwesenheit ? formatOrtsanwesenheit(form.ortsanwesenheit) : '—'}
-                </span>
-                {ortsanwesenheitStatus === 'ok' && <span className="standort-ok">Erfasst.</span>}
-                {ortsanwesenheitStatus === 'error' && <span className="standort-error">{GEO_ERROR_HINT}</span>}
-              </div>
-              <p className="muted" style={{ marginTop: '0.35rem', fontSize: '0.8rem' }}>
-                Wie Standort: Berechtigung beim ersten Klick; iOS nur nach Tippen; HTTPS nötig (außer localhost).
-              </p>
-            </label>
-            <label>
-              Auftragsdokumentation Fotos
-              <input
-                type="file"
-                accept="image/*"
-                multiple
-                onChange={async (e) => {
-                  const list = Array.from(e.target.files || [])
-                  e.target.value = ''
-                  if (!list.length) return
-                  const { attachments, fallbackUsed } = await filesToAttachments(list)
-                  if (attachments?.length) {
-                    setForm((f) => ({ ...f, dokumentationFotos: [...(f.dokumentationFotos || []), ...attachments] }))
-                    if (fallbackUsed) setFormFotoHinweis('Server-Upload nicht möglich – Fotos werden mit dem Auftrag gespeichert.')
-                  }
-                }}
-              />
-              <span className="field-hint">Fotos werden mit dem neuen Auftrag übernommen. Nicht vergessen, den Auftrag anzulegen.</span>
-              {formFotoHinweis && <span className="foto-upload-hinweis" role="status">{formFotoHinweis}</span>}
-              {(form.dokumentationFotos || []).length > 0 && (
-                <>
-                  <div className="foto-grid" style={{ marginTop: '0.5rem' }}>
-                    {(form.dokumentationFotos || []).map((att, i) => (
-                      <div key={i} className="foto-tile">
-                        <button type="button" className="foto-tile-imgbtn" onClick={() => openFormFotos(form.dokumentationFotos || [], i)} aria-label={`Foto ${i + 1} ansehen`}>
-                          <img src={getAttachmentSrc(att)} alt="" crossOrigin="anonymous" />
-                        </button>
-                        <button
-                          type="button"
-                          className="foto-tile-del"
-                          onClick={async () => {
-                            if (window.confirm('Foto wirklich löschen?')) await removeFormFoto(i)
-                          }}
-                          aria-label={`Foto ${i + 1} löschen`}
-                          title="Foto löschen"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                  <p className="muted" style={{ marginTop: '0.35rem' }}>
-                    Fotos: {(form.dokumentationFotos || []).length} (werden erst beim Anlegen des Auftrags gespeichert)
-                  </p>
-                </>
-              )}
-            </label>
-            <label>
-              Übersichtsplan Download-Link
-              <div className="input-with-action">
-                <input
-                  type="url"
-                  value={form.uebersichtsplanDownloadUrl}
-                  onChange={(e) => setForm((f) => ({ ...f, uebersichtsplanDownloadUrl: e.target.value }))}
-                  placeholder="https://drive.google.com/drive/folders/…"
-                />
-                <button
-                  type="button"
-                  className="btn ghost"
-                  onClick={() => {
-                    window.open(GOOGLE_DRIVE_MY_DRIVE_URL, '_blank', 'noopener')
-                  }}
-                  title="Google Drive öffnen, Zielordner anwählen, Link aus Adresszeile kopieren und hier einfügen"
-                >
-                  Drive öffnen
-                </button>
-                {getGoogleDriveSearchUrl(form.nvt) && (
-                  <button
-                    type="button"
-                    className="btn ghost"
-                    onClick={() => {
-                      window.open(getGoogleDriveSearchUrl(form.nvt), '_blank', 'noopener')
-                    }}
-                    title={`In Google Drive nach „${(form.nvt || '').trim()}“ suchen (z. B. Ordner, der mit der NVT-Nummer endet)`}
-                  >
-                    Nach NVT in Drive suchen
-                  </button>
-                )}
-              </div>
-              <span className="field-hint">
-                Drive öffnen oder nach NVT-Nummer suchen (Ordner, der mit der NVT endet). Link aus der Adresszeile hier einfügen.
-              </span>
-            </label>
-            <label>
-              GEO ACE Messung
-              <select
-                value={form.geoAceMessung}
-                onChange={(e) => setForm((f) => ({ ...f, geoAceMessung: e.target.value }))}
-              >
-                <option value="nein">Nein</option>
-                <option value="ja">Ja</option>
-              </select>
-            </label>
-            <label>
-              Geprüft
-              <select
-                value={form.geprueft}
-                onChange={(e) => setForm((f) => ({ ...f, geprueft: e.target.value }))}
-              >
-                <option value="nein">Nein</option>
-                <option value="ja">Ja</option>
-              </select>
-            </label>
-            <label className="label-inline">
-              <input
-                type="checkbox"
-                checked={!!form.abgeschlossen}
-                onChange={(e) => setForm((f) => ({ ...f, abgeschlossen: e.target.checked }))}
-              />
-              Auftrag abgeschlossen
-            </label>
-            <label>
-              Messung Graben
-              <input
-                type="text"
-                value={form.messungGraben}
-                onChange={(e) => setForm((f) => ({ ...f, messungGraben: e.target.value }))}
-              />
-            </label>
-            <label>
-              Notizen
-              <textarea
-                rows={3}
-                value={form.notizen}
-                onChange={(e) => setForm((f) => ({ ...f, notizen: e.target.value }))}
-                placeholder="Optionale Notizen"
-              />
-            </label>
-          </div>
-          <button className="btn primary" type="button" onClick={addAuftrag}>
-            Auftrag speichern
-          </button>
-        </section>
         )}
 
         <section className="card" id="auftragsliste">
