@@ -125,6 +125,8 @@ function writeProjects(list) {
   fs.writeFileSync(PROJECTS_FILE, JSON.stringify(arr, null, 2), 'utf8')
 }
 
+const PROJECTS_UPLOAD_DIR = path.join(DATA_DIR, 'uploads', 'projects')
+
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
   filename: (_req, file, cb) => {
@@ -134,6 +136,25 @@ const storage = multer.diskStorage({
   },
 })
 const upload = multer({ storage, limits: { fileSize: 25 * 1024 * 1024 } }) // 25 MB
+
+const projectUploadStorage = multer.diskStorage({
+  destination: (req, _file, cb) => {
+    const id = req.params.id || 'unknown'
+    const dir = path.join(PROJECTS_UPLOAD_DIR, String(id))
+    try {
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+      cb(null, dir)
+    } catch (err) {
+      cb(err, null)
+    }
+  },
+  filename: (_req, file, cb) => {
+    const safeName = (file.originalname || 'file').replace(/[^a-zA-Z0-9.-]/g, '_')
+    const unique = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}-${safeName}`
+    cb(null, unique)
+  },
+})
+const projectUpload = multer({ storage: projectUploadStorage, limits: { fileSize: 50 * 1024 * 1024 } }) // 50 MB für 3D
 
 const app = express()
 // Größeres Limit, damit Aufträge mit vielen Fotos (base64-Fallback) gespeichert werden können
@@ -150,6 +171,22 @@ app.use((_req, res, next) => {
 app.options('*', (_req, res) => res.sendStatus(204))
 
 app.use('/uploads', express.static(UPLOAD_DIR))
+
+// Projekt-Assets (von App hochgeladen): Bilder, 3D-Scans
+app.get('/api/uploads/projects/:id/:filename', (req, res) => {
+  const { id, filename } = req.params
+  if (!id || !filename || filename.includes('..')) return res.status(400).send('Invalid path')
+  const filePath = path.join(PROJECTS_UPLOAD_DIR, id, filename)
+  if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) return res.status(404).send('Not found')
+  res.sendFile(path.resolve(filePath))
+})
+
+app.post('/api/projects/:id/upload', projectUpload.single('file'), (req, res) => {
+  const id = req.params.id
+  if (!req.file) return res.status(400).json({ error: 'Keine Datei' })
+  const url = `${API_BASE}/api/uploads/projects/${id}/${req.file.filename}`
+  res.status(201).json({ url, filename: req.file.filename })
+})
 
 // Health-Check für Railway (schnelle 200-Antwort)
 app.get('/api/health', (_req, res) => {
@@ -306,6 +343,17 @@ app.post('/api/projects', (req, res) => {
     kundeTelefon: body.kundeTelefon ?? null,
     kundeEmail: body.kundeEmail ?? null,
     threeDScans: Array.isArray(body.threeDScans) ? body.threeDScans : [],
+    telefonNotizen: body.telefonNotizen ?? null,
+    kundenBeschwerden: body.kundenBeschwerden ?? null,
+    kundenBeschwerdenUnterschriebenAm: body.kundenBeschwerdenUnterschriebenAm ?? null,
+    auftragBestaetigtText: body.auftragBestaetigtText ?? null,
+    auftragBestaetigtUnterschriebenAm: body.auftragBestaetigtUnterschriebenAm ?? null,
+    abnahmeProtokollUnterschriftPath: body.abnahmeProtokollUnterschriftPath ?? null,
+    abnahmeProtokollDatum: body.abnahmeProtokollDatum ?? null,
+    abnahmeOhneMaengel: body.abnahmeOhneMaengel ?? null,
+    abnahmeMaengelText: body.abnahmeMaengelText ?? null,
+    bauhinderung: body.bauhinderung ?? null,
+    mapImagePath: body.mapImagePath ?? null,
   }
   projects.push(project)
   writeProjects(projects)

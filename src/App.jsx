@@ -1102,54 +1102,156 @@ function AuftragListe() {
           </section>
         )}
 
-        {selectedProject && (
-          <div className="modal-backdrop" onClick={() => setSelectedProject(null)} role="dialog" aria-modal="true" aria-label="Projektdetails">
-            <div className="modal-card project-detail-modal" onClick={(e) => e.stopPropagation()} style={{ padding: '1.25rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                <h2 style={{ margin: 0 }}>{selectedProject.name}</h2>
-                <button type="button" className="btn ghost" onClick={() => setSelectedProject(null)} aria-label="Schließen">×</button>
+        {selectedProject && (() => {
+          const proj = selectedProject
+          const measurements = Array.isArray(proj.measurements) ? proj.measurements : []
+          const arMeasurements = measurements.filter((m) => m.isARMeasurement)
+          const projectAssetUrl = (pathOrUrl) => {
+            if (!pathOrUrl) return null
+            const s = String(pathOrUrl).trim()
+            if (s.startsWith('http://') || s.startsWith('https://') || s.startsWith('/')) return s
+            const filename = s.split('/').pop() || s
+            return API_BASE ? `${API_BASE}/api/uploads/projects/${proj.id}/${encodeURIComponent(filename)}` : null
+          }
+          const metersByOberflaeche = {}
+          arMeasurements.forEach((m) => {
+            const key = (m.oberflaeche || m.oberflaecheSonstige || 'Ohne Angabe').trim()
+            const val = Number(m.referenceMeters) || 0
+            metersByOberflaeche[key] = (metersByOberflaeche[key] || 0) + val
+          })
+          const threeDScans = Array.isArray(proj.threeDScans) ? proj.threeDScans : []
+          const bau = proj.bauhinderung
+          return (
+            <div className="modal-backdrop" onClick={() => setSelectedProject(null)} role="dialog" aria-modal="true" aria-label="Projektdetails">
+              <div className="modal-card project-detail-modal" onClick={(e) => e.stopPropagation()} style={{ padding: '1.25rem', maxHeight: '90vh', overflow: 'auto' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                  <h2 style={{ margin: 0 }}>{proj.name}</h2>
+                  <button type="button" className="btn ghost" onClick={() => setSelectedProject(null)} aria-label="Schließen">×</button>
+                </div>
+
+                <h3 className="project-detail-section">Grunddaten</h3>
+                <dl className="project-detail-dl" style={{ margin: '0 0 1rem', display: 'grid', gap: '0.35rem 1.5rem', gridTemplateColumns: 'auto 1fr' }}>
+                  <dt className="muted">Zugewiesen an</dt>
+                  <dd>{proj.assignedToUserId ? projectUserName(proj.assignedToUserId) : '—'}</dd>
+                  <dt className="muted">Auftrag abgeschlossen</dt>
+                  <dd>{proj.auftragAbgeschlossen ? 'Ja' : 'Nein'}</dd>
+                  <dt className="muted">Straße</dt>
+                  <dd>{proj.strasse || '—'}</dd>
+                  <dt className="muted">Hausnummer</dt>
+                  <dd>{proj.hausnummer || '—'}</dd>
+                  <dt className="muted">PLZ / Ort</dt>
+                  <dd>{(proj.postleitzahl || proj.ort) ? [proj.postleitzahl, proj.ort].filter(Boolean).join(' ') : '—'}</dd>
+                  <dt className="muted">NVT-Nummer</dt>
+                  <dd>{proj.nvtNummer || '—'}</dd>
+                  <dt className="muted">Kolonne</dt>
+                  <dd>{proj.kolonne || '—'}</dd>
+                  <dt className="muted">Verbund / Pipes</dt>
+                  <dd>{[proj.verbundGroesse, proj.verbundFarbe, [proj.pipesFarbe1, proj.pipesFarbe2].filter(Boolean).join(', ')].filter(Boolean).join(' · ') || '—'}</dd>
+                  <dt className="muted">Kunde</dt>
+                  <dd>{[proj.kundeName, proj.kundeTelefon, proj.kundeEmail].filter(Boolean).join(' · ') || '—'}</dd>
+                  <dt className="muted">Termin</dt>
+                  <dd>{proj.termin ? new Date(proj.termin).toLocaleString('de-DE') : '—'}</dd>
+                  <dt className="muted">Google Drive</dt>
+                  <dd>{proj.googleDriveLink ? <a href={proj.googleDriveLink} target="_blank" rel="noopener noreferrer">Link</a> : '—'}</dd>
+                  <dt className="muted">Notizen</dt>
+                  <dd style={{ gridColumn: '1 / -1' }}>{proj.notizen || '—'}</dd>
+                </dl>
+
+                <h3 className="project-detail-section">Messungen & Fotos</h3>
+                {measurements.length === 0 && <p className="muted">Keine Messungen oder Fotos.</p>}
+                {measurements.length > 0 && (
+                  <div className="project-measurements-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '0.5rem', marginBottom: '1rem' }}>
+                    {measurements.map((m, idx) => {
+                      const imgUrl = projectAssetUrl(m.imagePath || m.imageUrl)
+                      const label = m.isARMeasurement ? `Messung ${(m.index != null ? m.index : idx + 1)}` : `Foto ${(m.index != null ? m.index : idx + 1)}`
+                      return (
+                        <div key={m.id || idx} style={{ border: '1px solid #e2e8f0', borderRadius: '0.5rem', overflow: 'hidden' }}>
+                          {imgUrl ? <img src={imgUrl} alt={label} style={{ width: '100%', height: 100, objectFit: 'cover' }} onError={(e) => { e.target.style.display = 'none' }} /> : <div style={{ height: 100, background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', color: '#94a3b8' }}>Kein Bild</div>}
+                          <div style={{ padding: '0.35rem 0.5rem', fontSize: '0.8rem' }}>
+                            <strong>{label}</strong>
+                            {m.referenceMeters != null && <span className="muted"> · {Number(m.referenceMeters).toFixed(2)} m</span>}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+
+                <h3 className="project-detail-section">AR-Messungen & Meter nach Bodenart</h3>
+                {arMeasurements.length === 0 && <p className="muted">Keine AR-Messungen.</p>}
+                {arMeasurements.length > 0 && (
+                  <>
+                    <p className="muted" style={{ marginBottom: '0.5rem' }}>Gesamtmeter nach Oberfläche:</p>
+                    <ul style={{ margin: '0 0 0.5rem', paddingLeft: '1.25rem' }}>
+                      {Object.entries(metersByOberflaeche).map(([oberflaeche, sum]) => (
+                        <li key={oberflaeche}><strong>{oberflaeche}</strong>: {Number(sum).toFixed(2)} m</li>
+                      ))}
+                    </ul>
+                    <p className="muted">Summe AR: {arMeasurements.reduce((s, m) => s + (Number(m.referenceMeters) || 0), 0).toFixed(2)} m</p>
+                  </>
+                )}
+
+                <h3 className="project-detail-section">3D-Scans</h3>
+                {threeDScans.length === 0 && <p className="muted">Keine 3D-Scans.</p>}
+                {threeDScans.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1rem' }}>
+                    {threeDScans.map((scan, idx) => {
+                      const scanUrl = projectAssetUrl(scan.url || scan.filePath)
+                      return (
+                        <div key={scan.id || idx} style={{ border: '1px solid #e2e8f0', borderRadius: '0.5rem', padding: '0.5rem' }}>
+                          <div style={{ marginBottom: '0.35rem' }}><strong>{scan.name || `Scan ${idx + 1}`}</strong></div>
+                          {scan.note && <p className="muted" style={{ fontSize: '0.9rem', margin: '0 0 0.5rem' }}>{scan.note}</p>}
+                          {scanUrl && (() => {
+                            const ext = (scanUrl.split('.').pop() || '').toLowerCase()
+                            if (ext === 'usdz' || ext === 'glb' || ext === 'gltf') {
+                              return (
+                                <model-viewer
+                                  src={scanUrl}
+                                  alt={scan.name || '3D-Scan'}
+                                  style={{ width: '100%', height: 280, backgroundColor: '#f1f5f9' }}
+                                  camera-controls
+                                  auto-rotate
+                                />
+                              )
+                            }
+                            return <p className="muted">Datei: <a href={scanUrl} target="_blank" rel="noopener noreferrer">Download</a></p>
+                          })()}
+                          {!scanUrl && <p className="muted">Keine Datei verknüpft (noch nicht synchronisiert).</p>}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+
+                <h3 className="project-detail-section">Abnahmeprotokoll</h3>
+                {proj.abnahmeOhneMaengel != null || proj.abnahmeMaengelText || proj.abnahmeProtokollUnterschriftPath ? (
+                  <div style={{ marginBottom: '1rem' }}>
+                    {proj.abnahmeOhneMaengel != null && <p><strong>Ohne Mängel:</strong> {proj.abnahmeOhneMaengel ? 'Ja' : 'Nein'}</p>}
+                    {proj.abnahmeMaengelText && <p><strong>Mängel / Anmerkungen:</strong> {proj.abnahmeMaengelText}</p>}
+                    {proj.abnahmeProtokollDatum && <p className="muted">Datum: {new Date(proj.abnahmeProtokollDatum).toLocaleDateString('de-DE')}</p>}
+                    {projectAssetUrl(proj.abnahmeProtokollUnterschriftPath) && <img src={projectAssetUrl(proj.abnahmeProtokollUnterschriftPath)} alt="Unterschrift" style={{ maxWidth: 200, border: '1px solid #e2e8f0', borderRadius: 4 }} />}
+                  </div>
+                ) : <p className="muted">Kein Abnahmeprotokoll.</p>}
+
+                <h3 className="project-detail-section">Bauhinderung</h3>
+                {bau && typeof bau === 'object' ? (
+                  <div className="project-bauhinderung" style={{ fontSize: '0.9rem', marginBottom: '1rem' }}>
+                    {bau.ticketNummer && <p><strong>Ticket:</strong> {bau.ticketNummer}</p>}
+                    {bau.datumEinsatz && <p><strong>Datum Einsatz:</strong> {new Date(bau.datumEinsatz).toLocaleDateString('de-DE')}</p>}
+                    {bau.beschreibungBauhindernis && <p><strong>Beschreibung:</strong> {bau.beschreibungBauhindernis}</p>}
+                    {bau.hinweiseAuftraggeber && <p><strong>Hinweise Auftraggeber:</strong> {bau.hinweiseAuftraggeber}</p>}
+                    {(bau.kundeNichtAnwesend || bau.keinZugangGrundstueck || bau.arbeitenNichtBegonnen || bau.neuerTerminNoetig) && (
+                      <p><strong>Ergebnis:</strong> {[bau.kundeNichtAnwesend && 'Kunde nicht anwesend', bau.keinZugangGrundstueck && 'Kein Zugang', bau.arbeitenNichtBegonnen && 'Arbeiten nicht begonnen', bau.neuerTerminNoetig && 'Neuer Termin nötig'].filter(Boolean).join(', ')}</p>
+                    )}
+                    {bau.unterschriftPath && projectAssetUrl(bau.unterschriftPath) && <img src={projectAssetUrl(bau.unterschriftPath)} alt="Unterschrift Bauhinderung" style={{ maxWidth: 200, border: '1px solid #e2e8f0', borderRadius: 4 }} />}
+                  </div>
+                ) : <p className="muted">Keine Bauhinderungsmeldung.</p>}
+
+                <p className="muted" style={{ marginTop: '0.5rem', fontSize: '0.85rem' }}>Angelegt: {proj.createdAt ? new Date(proj.createdAt).toLocaleString('de-DE') : '—'}</p>
               </div>
-              <dl className="project-detail-dl" style={{ margin: 0, display: 'grid', gap: '0.35rem 1.5rem', gridTemplateColumns: 'auto 1fr' }}>
-                <dt className="muted">Zugewiesen an</dt>
-                <dd>{selectedProject.assignedToUserId ? projectUserName(selectedProject.assignedToUserId) : '—'}</dd>
-                <dt className="muted">Auftrag abgeschlossen</dt>
-                <dd>{selectedProject.auftragAbgeschlossen ? 'Ja' : 'Nein'}</dd>
-                <dt className="muted">Straße</dt>
-                <dd>{selectedProject.strasse || '—'}</dd>
-                <dt className="muted">Hausnummer</dt>
-                <dd>{selectedProject.hausnummer || '—'}</dd>
-                <dt className="muted">PLZ</dt>
-                <dd>{selectedProject.postleitzahl || '—'}</dd>
-                <dt className="muted">Ort</dt>
-                <dd>{selectedProject.ort || '—'}</dd>
-                <dt className="muted">NVT-Nummer</dt>
-                <dd>{selectedProject.nvtNummer || '—'}</dd>
-                <dt className="muted">Kolonne</dt>
-                <dd>{selectedProject.kolonne || '—'}</dd>
-                <dt className="muted">Verbund Größe</dt>
-                <dd>{selectedProject.verbundGroesse || '—'}</dd>
-                <dt className="muted">Verbund Farbe</dt>
-                <dd>{selectedProject.verbundFarbe || '—'}</dd>
-                <dt className="muted">Pipes Farbe</dt>
-                <dd>{[selectedProject.pipesFarbe1, selectedProject.pipesFarbe2].filter(Boolean).join(', ') || '—'}</dd>
-                <dt className="muted">Name Kunde</dt>
-                <dd>{selectedProject.kundeName || '—'}</dd>
-                <dt className="muted">Telefon Kunde</dt>
-                <dd>{selectedProject.kundeTelefon || '—'}</dd>
-                <dt className="muted">E-Mail Kunde</dt>
-                <dd>{selectedProject.kundeEmail || '—'}</dd>
-                <dt className="muted">Termin</dt>
-                <dd>{selectedProject.termin ? new Date(selectedProject.termin).toLocaleString('de-DE') : '—'}</dd>
-                <dt className="muted">Google Drive</dt>
-                <dd>{selectedProject.googleDriveLink ? <a href={selectedProject.googleDriveLink} target="_blank" rel="noopener noreferrer">{selectedProject.googleDriveLink}</a> : '—'}</dd>
-                <dt className="muted">Notizen</dt>
-                <dd style={{ gridColumn: '1 / -1' }}>{selectedProject.notizen || '—'}</dd>
-                <dt className="muted">Angelegt</dt>
-                <dd>{selectedProject.createdAt ? new Date(selectedProject.createdAt).toLocaleString('de-DE') : '—'}</dd>
-              </dl>
             </div>
-          </div>
-        )}
+          )
+        })()}
       </main>
 
       {fotoViewer.open && fotoViewer.fotos.length > 0 && (

@@ -110,6 +110,16 @@
 .project-detail-modal dd {
   margin: 0;
 }
+.project-detail-section {
+  font-size: 0.95rem;
+  margin: 1rem 0 0.5rem;
+  padding-bottom: 0.25rem;
+  border-bottom: 1px solid #e2e8f0;
+  color: #334155;
+}
+.project-detail-section:first-of-type {
+  margin-top: 0;
+}
 .row {
   display: flex;
   flex-wrap: wrap;
