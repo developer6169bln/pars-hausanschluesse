@@ -1146,12 +1146,20 @@ function AuftragListe() {
             const filename = s.split('/').pop() || s
             return API_BASE ? `${API_BASE}/api/uploads/projects/${proj.id}/${encodeURIComponent(filename)}` : null
           }
+          const obLabel = (m) => {
+            if (!m) return 'Ohne Angabe'
+            const v = (m.oberflaeche ?? m.oberflaecheSonstige ?? m.Oberflaeche ?? '').toString().trim()
+            return v || 'Ohne Angabe'
+          }
+          const verLabel = (m) => {
+            if (!m) return 'Ohne Angabe'
+            const v = (m.verlegeart ?? m.verlegeartSonstige ?? m.Verlegeart ?? '').toString().trim()
+            return v || 'Ohne Angabe'
+          }
           const metersByOberflaecheVerlegeart = {}
-          const obKey = (m) => (m && (m.oberflaeche ?? m.oberflaecheSonstige ?? '')).toString().trim() || 'Ohne Angabe'
-          const verKey = (m) => (m && (m.verlegeart ?? m.verlegeartSonstige ?? '')).toString().trim() || 'Ohne Angabe'
           arMeasurements.forEach((m) => {
-            const ob = obKey(m)
-            const ver = verKey(m)
+            const ob = obLabel(m)
+            const ver = verLabel(m)
             const val = Number(m.referenceMeters) || 0
             if (!metersByOberflaecheVerlegeart[ob]) metersByOberflaecheVerlegeart[ob] = {}
             metersByOberflaecheVerlegeart[ob][ver] = (metersByOberflaecheVerlegeart[ob][ver] || 0) + val
@@ -1227,6 +1235,9 @@ function AuftragListe() {
                             <div style={{ padding: '0.35rem 0.5rem', fontSize: '0.8rem', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.35rem' }}>
                               <strong>{label}</strong>
                               {m.referenceMeters != null && <span className="muted">· {Number(m.referenceMeters).toFixed(2)} m</span>}
+                              {m.isARMeasurement && (obLabel(m) !== 'Ohne Angabe' || verLabel(m) !== 'Ohne Angabe') && (
+                                <span className="muted" style={{ width: '100%', fontSize: '0.75rem' }}>Oberfläche: {obLabel(m)} · Verlegeart: {verLabel(m)}</span>
+                              )}
                               {imgUrl && (
                                 <a href={imgUrl} target="_blank" rel="noopener noreferrer" download style={{ marginLeft: 'auto', fontSize: '0.75rem' }}>Download</a>
                               )}
@@ -1242,6 +1253,15 @@ function AuftragListe() {
                 {arMeasurements.length === 0 && <p className="muted">Keine AR-Messungen.</p>}
                 {arMeasurements.length > 0 && (
                   <>
+                    <p className="muted" style={{ marginBottom: '0.5rem' }}>Oberfläche und Verlegeart pro Messung (aus der App):</p>
+                    <ul style={{ margin: '0 0 0.75rem', paddingLeft: '1.25rem', fontSize: '0.9rem' }}>
+                      {arMeasurements.map((m, i) => (
+                        <li key={m.id || i}>
+                          Messung {m.index != null ? m.index : i + 1}: <strong>{obLabel(m)}</strong> / <strong>{verLabel(m)}</strong>
+                          {m.referenceMeters != null && <> — {Number(m.referenceMeters).toFixed(2)} m</>}
+                        </li>
+                      ))}
+                    </ul>
                     <p className="muted" style={{ marginBottom: '0.5rem' }}>Gesamtmeter nach Oberfläche und Verlegeart:</p>
                     <ul style={{ margin: '0 0 0.5rem', paddingLeft: '1.25rem', listStyle: 'none' }}>
                       {Object.entries(metersByOberflaecheVerlegeart).map(([oberflaeche, verlegeartSums]) => {
