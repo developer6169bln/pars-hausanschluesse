@@ -17,6 +17,19 @@ const API_BASE = (
   ''
 ).replace(/\/$/, '')
 
+const OBERFLAECHEN_OPTIONS = [
+  'Rasen / Grünfläche', 'Mutterboden / Erde', 'Kies / Schotter', 'Sandfläche', 'Beet / Gartenanlage',
+  'Betonpflaster', 'Natursteinpflaster', 'Gehwegplatten / Betonplatten', 'Rasengittersteine', 'Asphalt / Bitumen',
+  'Betonfläche', 'Einfahrt / Hofpflaster', 'Terrasse / Plattenbelag', 'Holzboden / WPC-Terrasse',
+  'Rollrasen / neu angelegte Grünfläche', 'Sonstige Oberfläche'
+]
+const VERLEGEART_OPTIONS = [
+  'Offener Graben (klassischer Tiefbau)', 'Schmalgraben / Mini-Graben', 'Einzug in vorhandenes Leerrohr',
+  'Spülbohrverfahren (Horizontalbohrung)', 'Erdrakete / Bodenverdrängungsverfahren',
+  'Pressbohrung unter Oberfläche (z. B. unter Einfahrt / Gehweg)',
+  'Einblasen / Einziehen der Pipe in vorhandene Trasse', 'Verlegung im Schutzrohr', 'Sonstige Verlegeart'
+]
+
 function getAttachmentSrc(item) {
   return item?.url || item?.dataUrl || ''
 }
@@ -540,6 +553,8 @@ function AuftragListe() {
   const [selectedProject, setSelectedProject] = useState(null)
   const [detailProject, setDetailProject] = useState(null)
   const [detailProjectLoading, setDetailProjectLoading] = useState(false)
+  const [editingSegmentMeasurements, setEditingSegmentMeasurements] = useState(null)
+  const [savingSegmentMeasurements, setSavingSegmentMeasurements] = useState(false)
   const detailProjectIdRef = React.useRef(null)
   const [standortStatus, setStandortStatus] = useState('') // '' | 'loading' | 'ok' | 'error'
   const [ortsanwesenheitStatus, setOrtsanwesenheitStatus] = useState('') // '' | 'loading' | 'ok' | 'error'
@@ -703,6 +718,7 @@ function AuftragListe() {
       detailProjectIdRef.current = null
       setDetailProject(null)
       setDetailProjectLoading(false)
+      setEditingSegmentMeasurements(null)
       return
     }
     const openedId = selectedProject.id
@@ -1137,8 +1153,23 @@ function AuftragListe() {
 
         {selectedProject && (() => {
           const proj = detailProject || selectedProject
-          const measurements = Array.isArray(proj.measurements) ? proj.measurements : []
+          const baseMeasurements = Array.isArray(proj.measurements) ? proj.measurements : []
+          const measurements = editingSegmentMeasurements ?? baseMeasurements
           const arMeasurements = measurements.filter((m) => m.isARMeasurement)
+          const getSegmentCount = (m) => {
+            const segs = m.polylineSegmentMeters
+            if (segs && segs.length > 0) return segs.length
+            const pts = m.polylinePoints?.length ?? 0
+            return Math.max(0, pts - 1)
+          }
+          const segmentObLabel = (m, i) => {
+            const v = (m.polylineSegmentOberflaeche && m.polylineSegmentOberflaeche[i] != null) ? String(m.polylineSegmentOberflaeche[i]).trim() : ''
+            return (v && v !== 'null' && v !== 'undefined') ? v : 'Ohne Angabe'
+          }
+          const segmentVerLabel = (m, i) => {
+            const v = (m.polylineSegmentVerlegeart && m.polylineSegmentVerlegeart[i] != null) ? String(m.polylineSegmentVerlegeart[i]).trim() : ''
+            return (v && v !== 'null' && v !== 'undefined') ? v : 'Ohne Angabe'
+          }
           const projectAssetUrl = (pathOrUrl) => {
             if (!pathOrUrl) return null
             const s = String(pathOrUrl).trim()
@@ -1158,11 +1189,22 @@ function AuftragListe() {
           }
           const metersByOberflaecheVerlegeart = {}
           arMeasurements.forEach((m) => {
-            const ob = obLabel(m)
-            const ver = verLabel(m)
-            const val = Number(m.referenceMeters) || 0
-            if (!metersByOberflaecheVerlegeart[ob]) metersByOberflaecheVerlegeart[ob] = {}
-            metersByOberflaecheVerlegeart[ob][ver] = (metersByOberflaecheVerlegeart[ob][ver] || 0) + val
+            const n = getSegmentCount(m)
+            if (n > 0) {
+              for (let i = 0; i < n; i++) {
+                const ob = segmentObLabel(m, i)
+                const ver = segmentVerLabel(m, i)
+                const val = Number(m.polylineSegmentMeters?.[i]) || 0
+                if (!metersByOberflaecheVerlegeart[ob]) metersByOberflaecheVerlegeart[ob] = {}
+                metersByOberflaecheVerlegeart[ob][ver] = (metersByOberflaecheVerlegeart[ob][ver] || 0) + val
+              }
+            } else {
+              const ob = obLabel(m)
+              const ver = verLabel(m)
+              const val = Number(m.referenceMeters) || 0
+              if (!metersByOberflaecheVerlegeart[ob]) metersByOberflaecheVerlegeart[ob] = {}
+              metersByOberflaecheVerlegeart[ob][ver] = (metersByOberflaecheVerlegeart[ob][ver] || 0) + val
+            }
           })
           const threeDScans = Array.isArray(proj.threeDScans) ? proj.threeDScans : []
           const bau = proj.bauhinderung
@@ -1253,15 +1295,110 @@ function AuftragListe() {
                 {arMeasurements.length === 0 && <p className="muted">Keine AR-Messungen.</p>}
                 {arMeasurements.length > 0 && (
                   <>
-                    <p className="muted" style={{ marginBottom: '0.5rem' }}>Oberfläche und Verlegeart pro Messung (aus der App):</p>
-                    <ul style={{ margin: '0 0 0.75rem', paddingLeft: '1.25rem', fontSize: '0.9rem' }}>
-                      {arMeasurements.map((m, i) => (
-                        <li key={m.id || i}>
-                          Messung {m.index != null ? m.index : i + 1}: <strong>{obLabel(m)}</strong> / <strong>{verLabel(m)}</strong>
-                          {m.referenceMeters != null && <> — {Number(m.referenceMeters).toFixed(2)} m</>}
-                        </li>
-                      ))}
-                    </ul>
+                    <p className="muted" style={{ marginBottom: '0.5rem' }}>Oberfläche und Verlegeart pro Messung / pro Segment (aus der App, hier bearbeitbar):</p>
+                    <div style={{ marginBottom: '0.75rem', fontSize: '0.9rem' }}>
+                      {arMeasurements.map((m, mIdx) => {
+                        const segCount = getSegmentCount(m)
+                        const globalIdx = measurements.findIndex((x) => x === m)
+                        const setSegmentOb = (segI, value) => {
+                          setEditingSegmentMeasurements((prev) => {
+                            const next = prev ? JSON.parse(JSON.stringify(prev)) : JSON.parse(JSON.stringify(baseMeasurements))
+                            const meas = next[globalIdx]
+                            if (!meas) return prev || next
+                            if (!Array.isArray(meas.polylineSegmentOberflaeche)) meas.polylineSegmentOberflaeche = []
+                            while (meas.polylineSegmentOberflaeche.length <= segI) meas.polylineSegmentOberflaeche.push(null)
+                            meas.polylineSegmentOberflaeche[segI] = value || null
+                            return next
+                          })
+                        }
+                        const setSegmentVer = (segI, value) => {
+                          setEditingSegmentMeasurements((prev) => {
+                            const next = prev ? JSON.parse(JSON.stringify(prev)) : JSON.parse(JSON.stringify(baseMeasurements))
+                            const meas = next[globalIdx]
+                            if (!meas) return prev || next
+                            if (!Array.isArray(meas.polylineSegmentVerlegeart)) meas.polylineSegmentVerlegeart = []
+                            while (meas.polylineSegmentVerlegeart.length <= segI) meas.polylineSegmentVerlegeart.push(null)
+                            meas.polylineSegmentVerlegeart[segI] = value || null
+                            return next
+                          })
+                        }
+                        if (segCount > 0) {
+                          return (
+                            <div key={m.id || mIdx} style={{ marginBottom: '1rem', border: '1px solid #e2e8f0', borderRadius: 8, padding: '0.5rem 0.75rem' }}>
+                              <strong>Messung {m.index != null ? m.index : mIdx + 1} (Polylinie)</strong>
+                              {m.referenceMeters != null && <span className="muted" style={{ marginLeft: '0.5rem' }}>— Gesamt: {Number(m.referenceMeters).toFixed(2)} m</span>}
+                              <ul style={{ margin: '0.35rem 0 0', paddingLeft: '1.25rem', listStyle: 'none' }}>
+                                {Array.from({ length: segCount }, (_, segI) => {
+                                  const from = String.fromCharCode(65 + segI)
+                                  const to = String.fromCharCode(66 + segI)
+                                  const segM = Number(m.polylineSegmentMeters?.[segI]) || 0
+                                  return (
+                                    <li key={segI} style={{ marginBottom: '0.35rem', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.5rem' }}>
+                                      <span style={{ minWidth: '3rem' }}>{from}→{to}</span>
+                                      <select
+                                        value={m.polylineSegmentOberflaeche?.[segI] ?? ''}
+                                        onChange={(e) => setSegmentOb(segI, e.target.value || null)}
+                                        style={{ fontSize: '0.85rem', padding: '2px 6px', minWidth: 180 }}
+                                      >
+                                        <option value="">— Auswählen</option>
+                                        {OBERFLAECHEN_OPTIONS.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+                                      </select>
+                                      <select
+                                        value={m.polylineSegmentVerlegeart?.[segI] ?? ''}
+                                        onChange={(e) => setSegmentVer(segI, e.target.value || null)}
+                                        style={{ fontSize: '0.85rem', padding: '2px 6px', minWidth: 200 }}
+                                      >
+                                        <option value="">— Auswählen</option>
+                                        {VERLEGEART_OPTIONS.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+                                      </select>
+                                      {segM > 0 && <span className="muted">{segM.toFixed(2)} m</span>}
+                                    </li>
+                                  )
+                                })}
+                              </ul>
+                            </div>
+                          )
+                        }
+                        return (
+                          <div key={m.id || mIdx} style={{ marginBottom: '0.35rem' }}>
+                            <strong>Messung {m.index != null ? m.index : mIdx + 1}:</strong> {obLabel(m)} / {verLabel(m)}
+                            {m.referenceMeters != null && <> — {Number(m.referenceMeters).toFixed(2)} m</>}
+                          </div>
+                        )
+                      })}
+                    </div>
+                    {editingSegmentMeasurements != null && (
+                      <div style={{ marginBottom: '0.75rem' }}>
+                        <button
+                          type="button"
+                          className="btn primary"
+                          disabled={savingSegmentMeasurements}
+                          onClick={() => {
+                            if (!API_BASE || !proj?.id) return
+                            setSavingSegmentMeasurements(true)
+                            fetch(`${API_BASE}/api/projects/${encodeURIComponent(proj.id)}`, {
+                              method: 'PATCH',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ measurements: editingSegmentMeasurements }),
+                            })
+                              .then((r) => {
+                                if (!r.ok) throw new Error('Speichern fehlgeschlagen')
+                                return r.json()
+                              })
+                              .then((updated) => {
+                                setDetailProject(updated)
+                                setEditingSegmentMeasurements(null)
+                                setProjects((prev) => prev.map((p) => (String(p.id) === String(updated.id) ? updated : p)))
+                              })
+                              .catch((e) => alert(e?.message || 'Fehler'))
+                              .finally(() => setSavingSegmentMeasurements(false))
+                          }}
+                        >
+                          {savingSegmentMeasurements ? 'Speichern…' : 'Segment-Zuordnungen speichern'}
+                        </button>
+                        <button type="button" className="btn ghost" style={{ marginLeft: '0.5rem' }} onClick={() => setEditingSegmentMeasurements(null)}>Abbrechen</button>
+                      </div>
+                    )}
                     <p className="muted" style={{ marginBottom: '0.5rem' }}>Gesamtmeter nach Oberfläche und Verlegeart:</p>
                     <ul style={{ margin: '0 0 0.5rem', paddingLeft: '1.25rem', listStyle: 'none' }}>
                       {Object.entries(metersByOberflaecheVerlegeart).map(([oberflaeche, verlegeartSums]) => {
