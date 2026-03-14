@@ -4,6 +4,12 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import App from './App.jsx'
 import './App.css'
 
+// Für Railway/Produktion: Externe Skripte (z. B. model-viewer) erwarten ggf. globales React
+if (typeof window !== 'undefined') {
+  window.React = React
+  window.ReactDOM = ReactDOM
+}
+
 class AppErrorBoundary extends React.Component {
   state = { error: null }
   static getDerivedStateFromError(error) {
