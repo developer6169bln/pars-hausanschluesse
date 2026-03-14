@@ -537,6 +537,7 @@ function AuftragListe() {
   const [projects, setProjects] = useState([])
   const [users, setUsers] = useState([])
   const [projectsLoaded, setProjectsLoaded] = useState(false)
+  const [selectedProject, setSelectedProject] = useState(null)
   const [standortStatus, setStandortStatus] = useState('') // '' | 'loading' | 'ok' | 'error'
   const [ortsanwesenheitStatus, setOrtsanwesenheitStatus] = useState('') // '' | 'loading' | 'ok' | 'error'
   const [formFotoHinweis, setFormFotoHinweis] = useState('')
@@ -1052,71 +1053,103 @@ function AuftragListe() {
           <section className="card">
             <h2>Projekte (App-Zuweisung)</h2>
             <p className="muted" style={{ marginTop: '-0.25rem', marginBottom: '0.75rem' }}>
-              In „Projekte zuweisen“ angelegte und zugewiesene Projekte – für die BauMeasurePro-App.
+              In „Projekte zuweisen“ angelegte Projekte – für die BauMeasurePro-App. Klick auf ein Projekt öffnet die Details.
             </p>
             {!projectsLoaded && <p className="muted">Laden…</p>}
             {projectsLoaded && projects.length === 0 && <p className="muted">Noch keine Projekte. Unter „Projekte zuweisen“ anlegen und einem Monteur zuweisen.</p>}
-            {projectsLoaded && projects.length > 0 && (
-              <ul className="list" style={{ listStyle: 'none', padding: 0 }}>
-                {projects.map((p) => (
-                  <li key={p.id} style={{ padding: '0.5rem 0', borderBottom: '1px solid #e2e8f0' }}>
+            {projectsLoaded && projects.length > 0 && (() => {
+              const offene = projects.filter((p) => !p.auftragAbgeschlossen)
+              const abgeschlossene = projects.filter((p) => !!p.auftragAbgeschlossen)
+              const renderProjectRow = (p) => (
+                <li key={p.id}>
+                  <button
+                    type="button"
+                    className="project-row-btn"
+                    onClick={() => setSelectedProject(p)}
+                    style={{ width: '100%', textAlign: 'left', padding: '0.5rem 0', border: 'none', background: 'none', cursor: 'pointer', borderBottom: '1px solid #e2e8f0' }}
+                  >
                     <strong>{p.name}</strong>
                     <span className="muted" style={{ marginLeft: '0.5rem' }}>
                       → Zugewiesen an: {p.assignedToUserId ? projectUserName(p.assignedToUserId) : '—'}
                     </span>
-                  </li>
-                ))}
-              </ul>
-            )}
+                  </button>
+                </li>
+              )
+              return (
+                <>
+                  {offene.length > 0 && (
+                    <>
+                      {abgeschlossene.length > 0 && <h3 style={{ marginTop: 0, marginBottom: '0.5rem', fontSize: '0.95rem' }}>Offen</h3>}
+                      <ul className="list" style={{ listStyle: 'none', padding: 0 }}>
+                        {offene.map(renderProjectRow)}
+                      </ul>
+                    </>
+                  )}
+                  {abgeschlossene.length > 0 && (
+                    <>
+                      <h3 style={{ marginTop: '1rem', marginBottom: '0.5rem', fontSize: '0.95rem' }}>Abgeschlossen</h3>
+                      <ul className="list" style={{ listStyle: 'none', padding: 0 }}>
+                        {abgeschlossene.map(renderProjectRow)}
+                      </ul>
+                    </>
+                  )}
+                </>
+              )
+            })()}
             <p style={{ marginTop: '0.75rem', marginBottom: 0 }}>
               <Link to="/projekte" className="btn ghost" style={{ fontSize: '0.9rem' }}>Projekte zuweisen →</Link>
             </p>
           </section>
         )}
 
-        <section className="card" id="auftragsliste">
-          <h2>Auftragsliste</h2>
-          {API_BASE && <p className="muted" style={{ marginTop: '-0.25rem', marginBottom: '0.5rem' }}>Gemeinsamer Auftragspool – für alle Nutzer sichtbar und bearbeitbar.</p>}
-          {!loaded && API_BASE && <p className="muted">Laden…</p>}
-          {loaded && fetchError && (
-            <div className="server-error" role="alert">
-              <p>Server nicht erreichbar. Bitte in einem Terminal <code>npm run server</code> starten (Port 3010). In <code>.env</code> muss <code>VITE_API_URL=http://localhost:3010</code> stehen – danach Dev-Server neu starten (<code>npm run dev</code>).</p>
-              <button type="button" className="btn primary" onClick={reload}>Erneut laden</button>
+        {selectedProject && (
+          <div className="modal-backdrop" onClick={() => setSelectedProject(null)} role="dialog" aria-modal="true" aria-label="Projektdetails">
+            <div className="modal-card project-detail-modal" onClick={(e) => e.stopPropagation()} style={{ padding: '1.25rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                <h2 style={{ margin: 0 }}>{selectedProject.name}</h2>
+                <button type="button" className="btn ghost" onClick={() => setSelectedProject(null)} aria-label="Schließen">×</button>
+              </div>
+              <dl className="project-detail-dl" style={{ margin: 0, display: 'grid', gap: '0.35rem 1.5rem', gridTemplateColumns: 'auto 1fr' }}>
+                <dt className="muted">Zugewiesen an</dt>
+                <dd>{selectedProject.assignedToUserId ? projectUserName(selectedProject.assignedToUserId) : '—'}</dd>
+                <dt className="muted">Auftrag abgeschlossen</dt>
+                <dd>{selectedProject.auftragAbgeschlossen ? 'Ja' : 'Nein'}</dd>
+                <dt className="muted">Straße</dt>
+                <dd>{selectedProject.strasse || '—'}</dd>
+                <dt className="muted">Hausnummer</dt>
+                <dd>{selectedProject.hausnummer || '—'}</dd>
+                <dt className="muted">PLZ</dt>
+                <dd>{selectedProject.postleitzahl || '—'}</dd>
+                <dt className="muted">Ort</dt>
+                <dd>{selectedProject.ort || '—'}</dd>
+                <dt className="muted">NVT-Nummer</dt>
+                <dd>{selectedProject.nvtNummer || '—'}</dd>
+                <dt className="muted">Kolonne</dt>
+                <dd>{selectedProject.kolonne || '—'}</dd>
+                <dt className="muted">Verbund Größe</dt>
+                <dd>{selectedProject.verbundGroesse || '—'}</dd>
+                <dt className="muted">Verbund Farbe</dt>
+                <dd>{selectedProject.verbundFarbe || '—'}</dd>
+                <dt className="muted">Pipes Farbe</dt>
+                <dd>{[selectedProject.pipesFarbe1, selectedProject.pipesFarbe2].filter(Boolean).join(', ') || '—'}</dd>
+                <dt className="muted">Name Kunde</dt>
+                <dd>{selectedProject.kundeName || '—'}</dd>
+                <dt className="muted">Telefon Kunde</dt>
+                <dd>{selectedProject.kundeTelefon || '—'}</dd>
+                <dt className="muted">E-Mail Kunde</dt>
+                <dd>{selectedProject.kundeEmail || '—'}</dd>
+                <dt className="muted">Termin</dt>
+                <dd>{selectedProject.termin ? new Date(selectedProject.termin).toLocaleString('de-DE') : '—'}</dd>
+                <dt className="muted">Google Drive</dt>
+                <dd>{selectedProject.googleDriveLink ? <a href={selectedProject.googleDriveLink} target="_blank" rel="noopener noreferrer">{selectedProject.googleDriveLink}</a> : '—'}</dd>
+                <dt className="muted">Notizen</dt>
+                <dd style={{ gridColumn: '1 / -1' }}>{selectedProject.notizen || '—'}</dd>
+                <dt className="muted">Angelegt</dt>
+                <dd>{selectedProject.createdAt ? new Date(selectedProject.createdAt).toLocaleString('de-DE') : '—'}</dd>
+              </dl>
             </div>
-          )}
-          {loaded && !API_BASE && auftraege.length === 0 && <p className="muted">Ohne Server keine Aufträge. Bitte VITE_API_URL in .env setzen und Server starten.</p>}
-          {loaded && API_BASE && !fetchError && auftraege.length === 0 && <p className="muted">Noch keine Aufträge erfasst.</p>}
-          {loaded && !fetchError && auftraege.length > 0 && (
-            <>
-              <p className="muted">
-                Offene Aufträge: {offeneAuftraege.length} · Abgeschlossen: {abgeschlosseneAuftraege.length} ·{' '}
-                Länge offen: {summeOffen.toFixed(1)} m · Länge abgeschlossen: {summeAbgeschlossen.toFixed(1)} m · Gesamtlänge: {summeGesamt.toFixed(1)} m
-              </p>
-
-              <h3>Offene Aufträge</h3>
-              {offeneAuftraege.length === 0 && (
-                <p className="muted">Keine offenen Aufträge.</p>
-              )}
-              {offeneAuftraege.length > 0 && (
-                <>
-                  {renderGroupedList(offeneAuftraege)}
-                  <p className="muted">Länge offen: {summeOffen.toFixed(1)} m</p>
-                </>
-              )}
-
-              <h3>Abgeschlossene Aufträge</h3>
-              {abgeschlosseneAuftraege.length === 0 && (
-                <p className="muted">Noch keine abgeschlossenen Aufträge.</p>
-              )}
-              {abgeschlosseneAuftraege.length > 0 && (
-                <>
-                  {renderGroupedList(abgeschlosseneAuftraege)}
-                  <p className="muted">Länge abgeschlossen: {summeAbgeschlossen.toFixed(1)} m</p>
-                </>
-              )}
-            </>
-          )}
-        </section>
+          </div>
+        )}
       </main>
 
       {fotoViewer.open && fotoViewer.fotos.length > 0 && (

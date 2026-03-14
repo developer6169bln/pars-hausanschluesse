@@ -100,6 +100,16 @@
   opacity: 0.6;
   cursor: not-allowed;
 }
+.project-row-btn:hover {
+  background: #f1f5f9 !important;
+}
+.project-detail-modal dt {
+  font-weight: 500;
+  color: #64748b;
+}
+.project-detail-modal dd {
+  margin: 0;
+}
 .row {
   display: flex;
   flex-wrap: wrap;
