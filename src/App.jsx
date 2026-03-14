@@ -538,6 +538,9 @@ function AuftragListe() {
   const [users, setUsers] = useState([])
   const [projectsLoaded, setProjectsLoaded] = useState(false)
   const [selectedProject, setSelectedProject] = useState(null)
+  const [detailProject, setDetailProject] = useState(null)
+  const [detailProjectLoading, setDetailProjectLoading] = useState(false)
+  const detailProjectIdRef = React.useRef(null)
   const [standortStatus, setStandortStatus] = useState('') // '' | 'loading' | 'ok' | 'error'
   const [ortsanwesenheitStatus, setOrtsanwesenheitStatus] = useState('') // '' | 'loading' | 'ok' | 'error'
   const [formFotoHinweis, setFormFotoHinweis] = useState('')
@@ -694,6 +697,36 @@ function AuftragListe() {
       })
       .finally(() => setProjectsLoaded(true))
   }, [API_BASE])
+
+  useEffect(() => {
+    if (!selectedProject) {
+      detailProjectIdRef.current = null
+      setDetailProject(null)
+      setDetailProjectLoading(false)
+      return
+    }
+    const openedId = selectedProject.id
+    detailProjectIdRef.current = openedId
+    setDetailProject(selectedProject)
+    setDetailProjectLoading(true)
+    if (!API_BASE) {
+      setDetailProjectLoading(false)
+      return
+    }
+    fetch(`${API_BASE}/api/projects`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((projs) => {
+        const list = Array.isArray(projs) ? projs : []
+        setProjects(list)
+        if (detailProjectIdRef.current !== openedId) return
+        const fresh = list.find((p) => String(p.id) === String(openedId))
+        setDetailProject(fresh != null ? fresh : selectedProject)
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (detailProjectIdRef.current === openedId) setDetailProjectLoading(false)
+      })
+  }, [selectedProject?.id])
 
   const projectUserName = (userId) => {
     if (!userId) return '—'
@@ -1103,7 +1136,7 @@ function AuftragListe() {
         )}
 
         {selectedProject && (() => {
-          const proj = selectedProject
+          const proj = detailProject || selectedProject
           const measurements = Array.isArray(proj.measurements) ? proj.measurements : []
           const arMeasurements = measurements.filter((m) => m.isARMeasurement)
           const projectAssetUrl = (pathOrUrl) => {
@@ -1127,7 +1160,10 @@ function AuftragListe() {
             <div className="modal-backdrop" onClick={() => setSelectedProject(null)} role="dialog" aria-modal="true" aria-label="Projektdetails">
               <div className="modal-card project-detail-modal" onClick={(e) => e.stopPropagation()} style={{ padding: '1.25rem', maxHeight: '90vh', overflow: 'auto' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                  <h2 style={{ margin: 0 }}>{proj.name}</h2>
+                  <div>
+                    <h2 style={{ margin: 0 }}>{proj.name}</h2>
+                    {detailProjectLoading && <span className="muted" style={{ fontSize: '0.85rem' }}>Aktualisiere…</span>}
+                  </div>
                   <button type="button" className="btn ghost" onClick={() => setSelectedProject(null)} aria-label="Schließen">×</button>
                 </div>
 
