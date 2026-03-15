@@ -2869,6 +2869,17 @@ function ProjektePage() {
       .catch((e) => alert(e.message))
   }
 
+  const deleteProject = (projectId, projectName) => {
+    if (!API_BASE) return
+    if (!window.confirm(`Projekt „${projectName || projectId}“ wirklich löschen? Das kann nicht rückgängig gemacht werden.`)) return
+    fetch(`${API_BASE}/api/projects/${encodeURIComponent(projectId)}`, { method: 'DELETE' })
+      .then((r) => {
+        if (!r.ok) throw new Error('Löschen fehlgeschlagen')
+        return load()
+      })
+      .catch((e) => alert(e.message))
+  }
+
   const setAssignment = (projectId, userId) => {
     if (!API_BASE) return
     fetch(`${API_BASE}/api/projects/${encodeURIComponent(projectId)}`, {
@@ -3115,6 +3126,15 @@ function ProjektePage() {
                               ))}
                             </select>
                           )}
+                          <button
+                            type="button"
+                            className="btn btn-delete"
+                            onClick={() => deleteProject(p.id, p.name)}
+                            title="Projekt löschen"
+                            aria-label={`Projekt ${p.name} löschen`}
+                          >
+                            Löschen
+                          </button>
                         </li>
                       )
                     })}

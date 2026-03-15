@@ -376,6 +376,17 @@ app.patch('/api/projects/:id', (req, res) => {
   res.json(projects[idx])
 })
 
+// Admin: Projekt löschen (nur in der Admin-Web-App, nicht in der BauMeasurePro-App)
+app.delete('/api/projects/:id', (req, res) => {
+  const projects = readProjects()
+  const id = req.params.id
+  const idx = projects.findIndex((p) => String(p.id) === String(id))
+  if (idx === -1) return res.status(404).json({ error: 'Projekt nicht gefunden' })
+  projects.splice(idx, 1)
+  writeProjects(projects)
+  res.status(204).send()
+})
+
 // ========== Mobile App: zugewiesene Projekte abrufen ==========
 // deviceId = Geräte-ID, die der Monteur in der App eingibt (oder die App automatisch sendet)
 app.get('/api/mobile/assigned-projects', (req, res) => {
