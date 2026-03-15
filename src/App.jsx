@@ -4,6 +4,8 @@ import { useState, useEffect, useRef, createContext, useContext } from 'react'
 const AuftraegeContext = createContext(null)
 
 const STORAGE_AUFTRAEGE = 'haus-auftraege'
+const ADMIN_AUTH_KEY = 'haus-admin-authenticated'
+const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD || 'Yk&14612023'
 const MAX_IMAGE_WIDTH = 800
 const JPEG_QUALITY = 0.75
 
@@ -1084,7 +1086,7 @@ function AuftragListe() {
         <p className="subtitle">
           Vom Gehweg bis ins Haus: Glasfaser‑Hausanschlüsse planen, dokumentieren und für das Aufmaß vorbereiten.
         </p>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', justifyContent: 'center', marginTop: '0.5rem' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', justifyContent: 'center', marginTop: '0.5rem', alignItems: 'center' }}>
           <Link to="/bericht" className="btn ghost">
             Bericht nach Datum
           </Link>
@@ -1094,6 +1096,17 @@ function AuftragListe() {
           <Link to="/projekte" className="btn ghost">
             Projekte zuweisen
           </Link>
+          <button
+            type="button"
+            className="btn ghost"
+            onClick={() => {
+              try { sessionStorage.removeItem(ADMIN_AUTH_KEY) } catch (_) {}
+              window.location.reload()
+            }}
+            style={{ marginLeft: 'auto' }}
+          >
+            Abmelden
+          </button>
         </div>
       </header>
 
@@ -3149,7 +3162,121 @@ function ProjektePage() {
   )
 }
 
+function AdminLoginPage({ onSuccess }) {
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  const handleSubmit = (e) => {
+    e.preventDefault()
+    setError('')
+    if (!password.trim()) {
+      setError('Bitte Passwort eingeben.')
+      return
+    }
+    setLoading(true)
+    if (password === ADMIN_PASSWORD) {
+      try {
+        sessionStorage.setItem(ADMIN_AUTH_KEY, '1')
+      } catch (_) {}
+      onSuccess()
+    } else {
+      setError('Falsches Passwort.')
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div style={{
+      minHeight: '100vh',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
+      fontFamily: 'system-ui, -apple-system, sans-serif',
+    }}>
+      <form
+        onSubmit={handleSubmit}
+        style={{
+          background: '#fff',
+          padding: '2rem 2.5rem',
+          borderRadius: 12,
+          boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)',
+          width: '100%',
+          maxWidth: 360,
+        }}
+      >
+        <h1 style={{ margin: '0 0 0.5rem 0', fontSize: '1.5rem', color: '#0f172a' }}>
+          Admin-Anmeldung
+        </h1>
+        <p style={{ margin: '0 0 1.5rem 0', color: '#64748b', fontSize: '0.9rem' }}>
+          Passwort eingeben, um die Admin-Web-App zu öffnen.
+        </p>
+        <label style={{ display: 'block', marginBottom: 6, fontWeight: 600, color: '#334155', fontSize: '0.9rem' }}>
+          Passwort
+        </label>
+        <input
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          autoComplete="current-password"
+          autoFocus
+          disabled={loading}
+          placeholder="Passwort"
+          style={{
+            width: '100%',
+            padding: '0.75rem 1rem',
+            fontSize: '1rem',
+            border: '1px solid #e2e8f0',
+            borderRadius: 8,
+            boxSizing: 'border-box',
+            marginBottom: '1rem',
+          }}
+        />
+        {error && (
+          <p style={{ margin: '0 0 1rem 0', color: '#dc2626', fontSize: '0.9rem' }} role="alert">
+            {error}
+          </p>
+        )}
+        <button
+          type="submit"
+          disabled={loading}
+          style={{
+            width: '100%',
+            padding: '0.75rem 1rem',
+            fontSize: '1rem',
+            fontWeight: 600,
+            color: '#fff',
+            background: loading ? '#94a3b8' : '#0f172a',
+            border: 'none',
+            borderRadius: 8,
+            cursor: loading ? 'not-allowed' : 'pointer',
+          }}
+        >
+          {loading ? 'Wird geprüft…' : 'Anmelden'}
+        </button>
+      </form>
+    </div>
+  )
+}
+
 export default function App() {
+  const [authenticated, setAuthenticated] = useState(() => {
+    try {
+      return sessionStorage.getItem(ADMIN_AUTH_KEY) === '1'
+    } catch {
+      return false
+    }
+  })
+
+  if (!authenticated) {
+    return (
+      <AdminLoginPage
+        onSuccess={() => setAuthenticated(true)}
+      />
+    )
+  }
+
   return (
     <AuftraegeProvider>
       {!API_BASE && (
