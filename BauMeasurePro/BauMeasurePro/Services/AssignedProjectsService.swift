@@ -137,6 +137,13 @@ private struct ApiMeasurement: Decodable {
     let date: String?
     let polylinePoints: [ApiPolylinePoint]?
     let polylineSegmentMeters: [Double]?
+    let polylineSegmentOberflaeche: [String?]?
+    let polylineSegmentVerlegeart: [String?]?
+    let sketchOffsetLat: Double?
+    let sketchOffsetLon: Double?
+    let sketchRotationDegrees: Double?
+    let sketchScale: Double?
+    let sketchMirrored: Bool?
 
     func toMeasurement() -> Measurement {
         let poly: [PolylinePoint]? = (polylinePoints ?? []).isEmpty ? nil : (polylinePoints?.map { p in
@@ -168,7 +175,14 @@ private struct ApiMeasurement: Decodable {
             verlegeartSonstige: verlegeartSonstige,
             date: (date.flatMap { ISO8601DateFormatter().date(from: $0) }) ?? Date(),
             polylinePoints: poly,
-            polylineSegmentMeters: segMeters
+            polylineSegmentMeters: segMeters,
+            polylineSegmentOberflaeche: polylineSegmentOberflaeche,
+            polylineSegmentVerlegeart: polylineSegmentVerlegeart,
+            sketchOffsetLat: sketchOffsetLat,
+            sketchOffsetLon: sketchOffsetLon,
+            sketchRotationDegrees: sketchRotationDegrees,
+            sketchScale: sketchScale,
+            sketchMirrored: sketchMirrored
         )
     }
 }
@@ -197,6 +211,9 @@ private struct ApiThreeDScan: Decodable {
     let note: String?
     let latitude: Double?
     let longitude: Double?
+    let sceneOriginX: Double?
+    let sceneOriginY: Double?
+    let sceneOriginZ: Double?
 
     func toThreeDScan() -> ThreeDScan {
         ThreeDScan(
@@ -206,7 +223,10 @@ private struct ApiThreeDScan: Decodable {
             filePath: filePath ?? "",
             note: note,
             latitude: latitude,
-            longitude: longitude
+            longitude: longitude,
+            sceneOriginX: sceneOriginX,
+            sceneOriginY: sceneOriginY,
+            sceneOriginZ: sceneOriginZ
         )
     }
 }

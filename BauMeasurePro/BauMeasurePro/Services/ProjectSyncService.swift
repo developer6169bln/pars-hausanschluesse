@@ -122,36 +122,51 @@ enum ProjectSyncService {
         func opt<T>(_ x: T?) -> Any { x ?? NSNull() }
 
         var measurementsArray: [[String: Any]] = []
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
         for m in project.measurements {
-            let pointsArray = m.points.map { p in
-                ["id": p.id.uuidString, "x": p.x, "y": p.y, "distance": p.distance] as [String: Any]
+            if let encoded = try? encoder.encode(m),
+               var dict = try? JSONSerialization.jsonObject(with: encoded) as? [String: Any] {
+                dict["imagePath"] = urlFor(m.imagePath) ?? m.imagePath
+                if dict["oberflaeche"] == nil { dict["oberflaeche"] = NSNull() }
+                if dict["oberflaecheSonstige"] == nil { dict["oberflaecheSonstige"] = NSNull() }
+                if dict["verlegeart"] == nil { dict["verlegeart"] = NSNull() }
+                if dict["verlegeartSonstige"] == nil { dict["verlegeartSonstige"] = NSNull() }
+                measurementsArray.append(dict)
+            } else {
+                let pointsArray = m.points.map { p in ["id": p.id.uuidString, "x": p.x, "y": p.y, "distance": p.distance] as [String: Any] }
+                let polylinePointsArray = (m.polylinePoints ?? []).map { p in ["id": p.id.uuidString, "latitude": p.latitude, "longitude": p.longitude] as [String: Any] }
+                measurementsArray.append([
+                    "id": m.id.uuidString,
+                    "imagePath": urlFor(m.imagePath) ?? m.imagePath,
+                    "latitude": m.latitude,
+                    "longitude": m.longitude,
+                    "address": m.address,
+                    "points": pointsArray,
+                    "totalDistance": m.totalDistance,
+                    "referenceMeters": opt(m.referenceMeters),
+                    "index": opt(m.index),
+                    "startLatitude": opt(m.startLatitude),
+                    "startLongitude": opt(m.startLongitude),
+                    "endLatitude": opt(m.endLatitude),
+                    "endLongitude": opt(m.endLongitude),
+                    "isARMeasurement": m.isARMeasurement,
+                    "oberflaeche": opt(m.oberflaeche),
+                    "oberflaecheSonstige": opt(m.oberflaecheSonstige),
+                    "verlegeart": opt(m.verlegeart),
+                    "verlegeartSonstige": opt(m.verlegeartSonstige),
+                    "date": opt(iso(m.date)),
+                    "polylinePoints": polylinePointsArray,
+                    "polylineSegmentMeters": m.polylineSegmentMeters ?? [],
+                    "polylineSegmentOberflaeche": (m.polylineSegmentOberflaeche ?? []).map { opt($0) },
+                    "polylineSegmentVerlegeart": (m.polylineSegmentVerlegeart ?? []).map { opt($0) },
+                    "sketchOffsetLat": opt(m.sketchOffsetLat),
+                    "sketchOffsetLon": opt(m.sketchOffsetLon),
+                    "sketchRotationDegrees": opt(m.sketchRotationDegrees),
+                    "sketchScale": opt(m.sketchScale),
+                    "sketchMirrored": m.sketchMirrored ?? false,
+                ])
             }
-            let polylinePointsArray = (m.polylinePoints ?? []).map { p in
-                ["id": p.id.uuidString, "latitude": p.latitude, "longitude": p.longitude] as [String: Any]
-            }
-            measurementsArray.append([
-                "id": m.id.uuidString,
-                "imagePath": urlFor(m.imagePath) ?? m.imagePath,
-                "latitude": m.latitude,
-                "longitude": m.longitude,
-                "address": m.address,
-                "points": pointsArray,
-                "totalDistance": m.totalDistance,
-                "referenceMeters": opt(m.referenceMeters),
-                "index": opt(m.index),
-                "startLatitude": opt(m.startLatitude),
-                "startLongitude": opt(m.startLongitude),
-                "endLatitude": opt(m.endLatitude),
-                "endLongitude": opt(m.endLongitude),
-                "isARMeasurement": m.isARMeasurement,
-                "oberflaeche": opt(m.oberflaeche),
-                "oberflaecheSonstige": opt(m.oberflaecheSonstige),
-                "verlegeart": opt(m.verlegeart),
-                "verlegeartSonstige": opt(m.verlegeartSonstige),
-                "date": opt(iso(m.date)),
-                "polylinePoints": polylinePointsArray,
-                "polylineSegmentMeters": m.polylineSegmentMeters ?? [],
-            ])
         }
 
         var threeDScansArray: [[String: Any]] = []
@@ -165,6 +180,9 @@ enum ProjectSyncService {
                 "note": opt(s.note),
                 "latitude": opt(s.latitude),
                 "longitude": opt(s.longitude),
+                "sceneOriginX": opt(s.sceneOriginX),
+                "sceneOriginY": opt(s.sceneOriginY),
+                "sceneOriginZ": opt(s.sceneOriginZ),
             ])
         }
 

@@ -22,11 +22,6 @@ struct ARMeasureView: View {
     @State private var requestUndo = false
     @State private var zoomFactor: Double = 1.0
     @State private var pendingImage: UIImage?
-    @State private var showArMetaSheet = false
-    @State private var selectedOberflaeche = ""
-    @State private var oberflaecheSonstige = ""
-    @State private var selectedVerlegeart = ""
-    @State private var verlegeartSonstige = ""
 
     /// true = Polylinie (mehrere Punkte), false = Einzelstrecke (A–B)
     @State private var isPolylineMode = false
@@ -40,6 +35,11 @@ struct ARMeasureView: View {
     @State private var intermediatePolylinePhotos: [UIImage] = []
     @State private var requestIntermediateSnapshot = false
     @State private var capturedIntermediateImage: UIImage?
+
+    /// Beim Speichern der Messung gesetzter 3D-Scan-Pfad (Standard-Mesh .scn); wird danach dem Projekt hinzugefügt und zurückgesetzt.
+    @State private var savedPointCloudPath: String?
+    /// Mesh-Bereiche während der Messung (Live-Anzeige, wenn LiDAR aktiv).
+    @State private var meshAnchorsCountDuringMeasure: Int = 0
 
     private var nextMeasurementIndex: Int {
         (viewModel.project(byId: projectId)?.measurements.count ?? 0) + 1
@@ -65,7 +65,32 @@ struct ARMeasureView: View {
                 pendingPolylineMeters = nil
                 pendingPolylineSegmentMeters = nil
             }
-            showArMetaSheet = true
+            saveARMeasurement(image: pendingImage ?? img, polylinePoints: pendingPolylinePoints, polylineMeters: pendingPolylineMeters, polylineSegmentMeters: pendingPolylineSegmentMeters)
+            if let path = savedPointCloudPath, let project = viewModel.project(byId: projectId) {
+                var updated = project
+                let nextIndex = updated.threeDScans.count + 1
+                let loc = locationService.location
+                updated.threeDScans.append(ThreeDScan(
+                    id: UUID(),
+                    name: "3D-Scan (Messung) \(nextIndex)",
+                    createdAt: Date(),
+                    filePath: path,
+                    note: nil,
+                    latitude: loc?.coordinate.latitude,
+                    longitude: loc?.coordinate.longitude,
+                    sceneOriginX: nil,
+                    sceneOriginY: nil,
+                    sceneOriginZ: nil
+                ))
+                viewModel.updateProject(updated)
+                savedPointCloudPath = nil
+            }
+            pendingImage = nil
+            pendingPolylinePoints = nil
+            pendingPolylineMeters = nil
+            pendingPolylineSegmentMeters = nil
+            resetForNewMeasurement()
+            showSavedAlert = true
         }
         .onChange(of: capturedIntermediateImage) { _, img in
             guard let img = img else { return }
@@ -75,10 +100,7 @@ struct ARMeasureView: View {
         .alert("Gespeichert", isPresented: $showSavedAlert) {
             Button("OK", role: .cancel) { }
         } message: {
-            Text("Die AR-Messung wurde dem Projekt hinzugefügt. Du kannst direkt die nächste Messung starten.")
-        }
-        .sheet(isPresented: $showArMetaSheet) {
-            arMetaSheet
+            Text("Die AR-Messung wurde dem Projekt hinzugefügt. Oberfläche & Verlegeart kannst du in den Messungsdetails nachträglich eintragen.")
         }
     }
 
@@ -113,7 +135,13 @@ struct ARMeasureView: View {
                 if !polylineSegmentMeters.isEmpty { polylineSegmentMeters.removeLast() }
             },
             requestIntermediateSnapshot: $requestIntermediateSnapshot,
-            capturedIntermediateImage: $capturedIntermediateImage
+            capturedIntermediateImage: $capturedIntermediateImage,
+            storage: storage,
+            projectId: projectId,
+            meshAnchorsCount: $meshAnchorsCountDuringMeasure,
+            on3DScanExported: { path in
+                savedPointCloudPath = path
+            }
         )
         .ignoresSafeArea()
         .zIndex(0)
@@ -131,13 +159,22 @@ struct ARMeasureView: View {
     @ViewBuilder
     private var topOverlay: some View {
         VStack(spacing: 8) {
-            if ARWorldTrackingConfiguration.supportsSceneReconstruction(.mesh) {
+            if ARWorldTrackingConfiguration.supportsSceneReconstruction(.meshWithClassification) || ARWorldTrackingConfiguration.supportsSceneReconstruction(.mesh) {
                 Text("LiDAR/Mesh + Anchors aktiv")
                     .font(.caption2)
                     .foregroundStyle(.white.opacity(0.9))
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
                     .background(.black.opacity(0.5))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
+            if meshAnchorsCountDuringMeasure > 0 {
+                Text("3D-Scan (Standard): \(meshAnchorsCountDuringMeasure) Mesh-Bereiche (wird mit Messung gespeichert)")
+                    .font(.caption2)
+                    .foregroundStyle(.white.opacity(0.95))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(.blue.opacity(0.6))
                     .clipShape(RoundedRectangle(cornerRadius: 6))
             }
             if raycastFailed {
@@ -309,18 +346,15 @@ struct ARMeasureView: View {
     }
 
     private func saveARMeasurement(image: UIImage, polylinePoints: [PolylinePoint]?, polylineMeters: Double?, polylineSegmentMeters: [Double]?) {
-        guard let pendingImage = pendingImage else { return }
         let project = viewModel.project(byId: projectId)
         let projectName = project?.name
-        let surfaceText = selectedOberflaeche == "Sonstige Oberfläche" ? oberflaecheSonstige.trimmingCharacters(in: .whitespacesAndNewlines) : selectedOberflaeche
-        let layingText = selectedVerlegeart == "Sonstige Verlegeart" ? verlegeartSonstige.trimmingCharacters(in: .whitespacesAndNewlines) : selectedVerlegeart
         let overlay = StorageService.PhotoOverlayInfo(
             strasse: project?.strasse,
             hausnummer: project?.hausnummer,
             nvtNummer: project?.nvtNummer,
             date: Date(),
-            oberflaecheText: surfaceText.isEmpty ? nil : surfaceText,
-            verlegeartText: layingText.isEmpty ? nil : layingText
+            oberflaecheText: nil,
+            verlegeartText: nil
         )
         let meters: Double
         if let poly = polylineMeters, !(polylinePoints?.isEmpty ?? true) {
@@ -330,7 +364,7 @@ struct ARMeasureView: View {
         } else {
             return
         }
-        guard let path = storage.saveImage(pendingImage, projectName: projectName, overlay: overlay) else { return }
+        guard let path = storage.saveImage(image, projectName: projectName, overlay: overlay) else { return }
         let loc = locationService.location
         let lat = loc?.coordinate.latitude ?? 0
         let lon = loc?.coordinate.longitude ?? 0
@@ -355,10 +389,6 @@ struct ARMeasureView: View {
                 m.index = nextIndex
             }
             m.isARMeasurement = true
-            m.oberflaeche = selectedOberflaeche.isEmpty ? nil : selectedOberflaeche
-            m.oberflaecheSonstige = oberflaecheSonstige.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : oberflaecheSonstige.trimmingCharacters(in: .whitespacesAndNewlines)
-            m.verlegeart = selectedVerlegeart.isEmpty ? nil : selectedVerlegeart
-            m.verlegeartSonstige = verlegeartSonstige.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : verlegeartSonstige.trimmingCharacters(in: .whitespacesAndNewlines)
             if let poly = polylinePoints, !poly.isEmpty {
                 m.startLatitude = firstPoly?.latitude ?? lat
                 m.startLongitude = firstPoly?.longitude ?? lon
@@ -383,95 +413,6 @@ struct ARMeasureView: View {
     }
 }
 
-private extension ARMeasureView {
-    var oberflaechenOptions: [String] {
-        [
-            "Rasen / Grünfläche",
-            "Mutterboden / Erde",
-            "Kies / Schotter",
-            "Sandfläche",
-            "Beet / Gartenanlage",
-            "Betonpflaster",
-            "Natursteinpflaster",
-            "Gehwegplatten / Betonplatten",
-            "Rasengittersteine",
-            "Asphalt / Bitumen",
-            "Betonfläche",
-            "Einfahrt / Hofpflaster",
-            "Terrasse / Plattenbelag",
-            "Holzboden / WPC-Terrasse",
-            "Rollrasen / neu angelegte Grünfläche",
-            "Sonstige Oberfläche"
-        ]
-    }
-
-    var verlegeartOptions: [String] {
-        [
-            "Offener Graben (klassischer Tiefbau)",
-            "Schmalgraben / Mini-Graben",
-            "Einzug in vorhandenes Leerrohr",
-            "Spülbohrverfahren (Horizontalbohrung)",
-            "Erdrakete / Bodenverdrängungsverfahren",
-            "Pressbohrung unter Oberfläche (z. B. unter Einfahrt / Gehweg)",
-            "Einblasen / Einziehen der Pipe in vorhandene Trasse",
-            "Verlegung im Schutzrohr",
-            "Sonstige Verlegeart"
-        ]
-    }
-
-    var arMetaSheet: some View {
-        NavigationStack {
-            Form {
-                Section("Oberfläche") {
-                    Picker("Art der Oberfläche", selection: $selectedOberflaeche) {
-                        Text("—").tag("")
-                        ForEach(oberflaechenOptions, id: \.self) { Text($0).tag($0) }
-                    }
-                    if selectedOberflaeche == "Sonstige Oberfläche" {
-                        TextField("Sonstige Oberfläche", text: $oberflaecheSonstige)
-                    }
-                }
-                Section("Verlegeart der Pipe") {
-                    Picker("Verlegeart", selection: $selectedVerlegeart) {
-                        Text("—").tag("")
-                        ForEach(verlegeartOptions, id: \.self) { Text($0).tag($0) }
-                    }
-                    if selectedVerlegeart == "Sonstige Verlegeart" {
-                        TextField("Sonstige Verlegeart", text: $verlegeartSonstige)
-                    }
-                }
-            }
-            .navigationTitle("Zusatzangaben")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Abbrechen") {
-                        pendingImage = nil
-                        showArMetaSheet = false
-                    }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Speichern") {
-                        saveARMeasurement(image: pendingImage ?? UIImage(), polylinePoints: pendingPolylinePoints, polylineMeters: pendingPolylineMeters, polylineSegmentMeters: pendingPolylineSegmentMeters)
-                        pendingImage = nil
-                        pendingPolylinePoints = nil
-                        pendingPolylineMeters = nil
-                        pendingPolylineSegmentMeters = nil
-                        showArMetaSheet = false
-                        resetForNewMeasurement()
-                        showSavedAlert = true
-                        selectedOberflaeche = ""
-                        oberflaecheSonstige = ""
-                        selectedVerlegeart = ""
-                        verlegeartSonstige = ""
-                    }
-                    .disabled(selectedOberflaeche.isEmpty || selectedVerlegeart.isEmpty || (selectedOberflaeche == "Sonstige Oberfläche" && oberflaecheSonstige.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) || (selectedVerlegeart == "Sonstige Verlegeart" && verlegeartSonstige.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty))
-                }
-            }
-        }
-    }
-}
-
 // MARK: - ARSCNView mit Raycast, Punkten, Linie und Snapshot
 
 struct ARMeasureSceneView: UIViewRepresentable {
@@ -491,6 +432,10 @@ struct ARMeasureSceneView: UIViewRepresentable {
     var onPolySegmentRemoved: () -> Void
     @Binding var requestIntermediateSnapshot: Bool
     @Binding var capturedIntermediateImage: UIImage?
+    var storage: StorageService
+    var projectId: UUID
+    @Binding var meshAnchorsCount: Int
+    var on3DScanExported: ((String?) -> Void)?
 
     func makeUIView(context: Context) -> UIView {
         let container = UIView(frame: .zero)
@@ -505,23 +450,38 @@ struct ARMeasureSceneView: UIViewRepresentable {
         let config = ARWorldTrackingConfiguration()
         config.planeDetection = [.horizontal, .vertical]
         config.environmentTexturing = .automatic
-        if ARWorldTrackingConfiguration.supportsSceneReconstruction(.mesh) {
+        if ARWorldTrackingConfiguration.supportsSceneReconstruction(.meshWithClassification) {
+            config.sceneReconstruction = .meshWithClassification
+        } else         if ARWorldTrackingConfiguration.supportsSceneReconstruction(.mesh) {
             config.sceneReconstruction = .mesh
         }
         sceneView.session.run(config)
 
         container.addSubview(sceneView)
 
+        let pathLineNode = SCNNode()
+        pathLineNode.name = "MeasurePathLineNode"
+        sceneView.scene.rootNode.addChildNode(pathLineNode)
+        context.coordinator.pathLineNode = pathLineNode
+
         let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleTap(_:)))
         container.addGestureRecognizer(tap)
 
         context.coordinator.containerView = container
         context.coordinator.sceneView = sceneView
+        context.coordinator.storage = storage
+        context.coordinator.projectId = projectId
+        context.coordinator.meshAnchorsCountBinding = $meshAnchorsCount
+        context.coordinator.on3DScanExported = on3DScanExported
         return container
     }
 
     func updateUIView(_ container: UIView, context: Context) {
         context.coordinator.parent = self
+        context.coordinator.storage = storage
+        context.coordinator.projectId = projectId
+        context.coordinator.meshAnchorsCountBinding = $meshAnchorsCount
+        context.coordinator.on3DScanExported = on3DScanExported
         // Layout + Zoom: wir skalieren das ARSCNView innerhalb des Containers und croppen über clipsToBounds.
         if let sceneView = context.coordinator.sceneView {
             let z = max(1.0, min(zoomFactor, 2.0))
@@ -535,8 +495,13 @@ struct ARMeasureSceneView: UIViewRepresentable {
 
         if requestSnapshot {
             let distance = distanceMeters
+            let coord = context.coordinator
+            let exportCallback = on3DScanExported
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                let img = context.coordinator.sceneView?.snapshot() ?? UIImage()
+                if let path = coord.exportMeshAndSave(storage: storage, scanId: UUID()) {
+                    exportCallback?(path)
+                }
+                let img = coord.sceneView?.snapshot() ?? UIImage()
                 capturedImage = addReadableOverlay(to: img, distance: distance)
                 requestSnapshot = false
             }
@@ -603,9 +568,96 @@ struct ARMeasureSceneView: UIViewRepresentable {
         var polyPointNodes: [SCNNode] = []
         var polyLineNodes: [SCNNode] = []
         var measurementAnchors: [ARAnchor] = []
+        var distanceKalman: KalmanFilter?
+
+        weak var pathLineNode: SCNNode?
+        var pathPositions: [simd_float3] = []
+        var lastPathPosition: simd_float3?
+        var frameCount = 0
+        var storage: StorageService?
+        var projectId: UUID?
+        var meshAnchorsCountBinding: Binding<Int>?
+        var on3DScanExported: ((String?) -> Void)?
 
         init(_ parent: ARMeasureSceneView) {
             self.parent = parent
+        }
+
+        func session(_ session: ARSession, didUpdate frame: ARFrame) {
+            let camPos = simd_make_float3(frame.camera.transform.columns.3.x, frame.camera.transform.columns.3.y, frame.camera.transform.columns.3.z)
+            if let last = lastPathPosition {
+                if simd_distance(camPos, last) > 0.25 {
+                    pathPositions.append(camPos)
+                    lastPathPosition = camPos
+                    updateDashedPathLine()
+                }
+            } else {
+                pathPositions.append(camPos)
+                lastPathPosition = camPos
+                updateDashedPathLine()
+            }
+
+            frameCount += 1
+            if frameCount % 10 == 0 {
+                let meshCount = frame.anchors.compactMap { $0 as? ARMeshAnchor }.count
+                DispatchQueue.main.async { [weak self] in
+                    self?.meshAnchorsCountBinding?.wrappedValue = meshCount
+                }
+            }
+        }
+
+        private func updateDashedPathLine() {
+            guard let pathNode = pathLineNode, pathPositions.count >= 2 else { return }
+            pathNode.childNodes.forEach { $0.removeFromParentNode() }
+            let dashLength: Float = 0.08
+            let gapLength: Float = 0.05
+            let step = dashLength + gapLength
+            let radius: CGFloat = 0.012
+            for i in 0 ..< (pathPositions.count - 1) {
+                let a = pathPositions[i]
+                let b = pathPositions[i + 1]
+                let seg = b - a
+                let len = simd_length(seg)
+                guard len > 0.001 else { continue }
+                let dir = seg / len
+                var t: Float = 0
+                while t < len {
+                    let tEnd = min(t + dashLength, len)
+                    let start = a + dir * t
+                    let end = a + dir * tEnd
+                    let segLen = simd_length(end - start)
+                    guard segLen > 0.001 else { t += step; continue }
+                    let cylinder = SCNCylinder(radius: radius, height: CGFloat(segLen))
+                    cylinder.firstMaterial?.diffuse.contents = UIColor.systemOrange
+                    cylinder.firstMaterial?.lightingModel = .constant
+                    let node = SCNNode(geometry: cylinder)
+                    node.simdPosition = (start + end) * 0.5
+                    node.simdOrientation = simd_quatf(from: simd_make_float3(0, 1, 0), to: simd_normalize(end - start))
+                    pathNode.addChildNode(node)
+                    t += step
+                }
+            }
+        }
+
+        func exportMeshAndSave(storage: StorageService, scanId: UUID) -> String? {
+            guard let view = sceneView, let frame = view.session.currentFrame else { return nil }
+            let meshAnchors = frame.anchors.compactMap { $0 as? ARMeshAnchor }
+            guard !meshAnchors.isEmpty else { return nil }
+            let orientation = view.window?.windowScene?.interfaceOrientation ?? .portrait
+            let scene = SCNScene()
+            for meshAnchor in meshAnchors {
+                let geo: SCNGeometry? = SCNGeometry.fromAnchor(meshAnchor: meshAnchor, frame: frame, orientation: orientation)
+                    ?? SCNGeometry.copyFromAnchor(meshAnchor: meshAnchor)
+                guard let geo = geo else { continue }
+                for mat in geo.materials {
+                    mat.transparency = 1.0
+                    mat.transparencyMode = .default
+                }
+                let node = SCNNode(geometry: geo)
+                node.simdTransform = meshAnchor.transform
+                scene.rootNode.addChildNode(node)
+            }
+            return storage.save3DScene(scene, scanId: scanId)
         }
 
         @objc func handleTap(_ gesture: UITapGestureRecognizer) {
@@ -680,7 +732,15 @@ struct ARMeasureSceneView: UIViewRepresentable {
                 total += simd_distance(polyPoints[i - 1], polyPoints[i])
             }
             DispatchQueue.main.async {
-                self.parent.distanceMeters = Double(total)
+                let filtered: Double
+                if var k = self.distanceKalman {
+                    filtered = Double(k.update(measurement: total))
+                    self.distanceKalman = k
+                } else {
+                    self.distanceKalman = KalmanFilter(initialValue: total)
+                    filtered = Double(total)
+                }
+                self.parent.distanceMeters = filtered
                 self.parent.onPolyPointAdded()
                 self.parent.polylinePointCount = self.polyPoints.count
             }
@@ -765,10 +825,19 @@ struct ARMeasureSceneView: UIViewRepresentable {
             labelBNode = label
 
             if let a = pointA {
-                let distance = simd_distance(a, pos)
+                let raw = simd_distance(a, pos)
                 addLine(from: a, to: pos, in: view)
                 DispatchQueue.main.async {
-                    self.parent.distanceMeters = Double(distance)
+                    let filtered: Double
+                    if var k = self.distanceKalman {
+                        filtered = Double(k.update(measurement: raw))
+                        self.distanceKalman = k
+                    } else {
+                        var k = KalmanFilter(initialValue: raw)
+                        self.distanceKalman = k
+                        filtered = Double(raw)
+                    }
+                    self.parent.distanceMeters = filtered
                 }
             }
         }
@@ -823,6 +892,7 @@ struct ARMeasureSceneView: UIViewRepresentable {
         }
 
         func clearMeasurementNodes() {
+            distanceKalman = nil
             if let session = sceneView?.session {
                 for anchor in measurementAnchors {
                     session.remove(anchor: anchor)
@@ -846,6 +916,9 @@ struct ARMeasureSceneView: UIViewRepresentable {
             polyPointNodes.removeAll()
             polyLineNodes.removeAll()
             polyPoints.removeAll()
+            pathPositions.removeAll()
+            lastPathPosition = nil
+            pathLineNode?.childNodes.forEach { $0.removeFromParentNode() }
         }
 
         func undoLastPoint() {

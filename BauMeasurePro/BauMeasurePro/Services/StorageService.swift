@@ -208,6 +208,26 @@ class StorageService {
         }
     }
 
+    /// Speichert eine Punktwolke als PLY (ScanAce-ähnlich, RGB pro Punkt).
+    /// Gibt den relativen Pfad zurück (z. B. „3dscans/<id>.ply“) oder nil bei Fehler.
+    func savePointCloudPLY(_ data: Data, scanId: UUID) -> String? {
+        guard let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return nil }
+        let subdir = dir.appendingPathComponent("3dscans", isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(at: subdir, withIntermediateDirectories: true)
+        } catch {
+            return nil
+        }
+        let fileName = "\(scanId.uuidString).ply"
+        let url = subdir.appendingPathComponent(fileName)
+        do {
+            try data.write(to: url)
+            return "3dscans/\(fileName)"
+        } catch {
+            return nil
+        }
+    }
+
     /// Liefert den vollen Dateipfad für einen gespeicherten Bildnamen (oder Legacy-Vollpfad).
     /// Beim Laden immer diese Methode verwenden, damit sowohl neue (nur Dateiname) als auch
     /// alte (Vollpfad) Einträge funktionieren.

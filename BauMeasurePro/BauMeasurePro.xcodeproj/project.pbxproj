@@ -34,9 +34,17 @@
 		BM01M12F60000100000001 /* ARMeshScanView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BM01M22F60000100000002 /* ARMeshScanView.swift */; };
 		BM01M32F60000100000003 /* SCNGeometry+ARMeshAnchor.swift in Sources */ = {isa = PBXBuildFile; fileRef = BM01M42F60000100000004 /* SCNGeometry+ARMeshAnchor.swift */; };
 		BM01OS1F60000100000001 /* OpenStreetMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BM01OS2F60000100000002 /* OpenStreetMapView.swift */; };
+		BM01OT1F60000100000001 /* OSMTileOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = BM01OT2F60000100000002 /* OSMTileOverlay.swift */; };
+		BM01SC1F60000100000001 /* SketchOSMMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BM01SC2F60000100000002 /* SketchOSMMapView.swift */; };
+		BM01ML1F60000100000001 /* SketchMapLibreView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BM01ML2F60000100000002 /* SketchMapLibreView.swift */; };
 		BM01AS1F60000100000001 /* AssignedProjectsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BM01AS2F60000100000001 /* AssignedProjectsService.swift */; };
 		BM01DS1F60000100000001 /* DeviceIdSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BM01DS2F60000100000001 /* DeviceIdSettingsView.swift */; };
 		BM01SY1F60000100000001 /* ProjectSyncService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BM01SY2F60000100000001 /* ProjectSyncService.swift */; };
+		BM01KF1F60000100000001 /* KalmanFilter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BM01KF2F60000100000002 /* KalmanFilter.swift */; };
+		BM01EX1F60000100000001 /* ExportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BM01EX2F60000100000002 /* ExportService.swift */; };
+		BM01SK1F60000100000001 /* MeasurementSketchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BM01SK2F60000100000002 /* MeasurementSketchView.swift */; };
+		BM01PC1F60000100000001 /* PointCloudService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BM01PC2F60000100000002 /* PointCloudService.swift */; };
+		BM01SV1F60000100000001 /* Scan3DViewerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BM01SV2F60000100000002 /* Scan3DViewerView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -69,9 +77,17 @@
 		BM01M22F60000100000002 /* ARMeshScanView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ARMeshScanView.swift; sourceTree = "<group>"; };
 		BM01M42F60000100000004 /* SCNGeometry+ARMeshAnchor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SCNGeometry+ARMeshAnchor.swift"; sourceTree = "<group>"; };
 		BM01OS2F60000100000002 /* OpenStreetMapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenStreetMapView.swift; sourceTree = "<group>"; };
+		BM01OT2F60000100000002 /* OSMTileOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OSMTileOverlay.swift; sourceTree = "<group>"; };
+		BM01SC2F60000100000002 /* SketchOSMMapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SketchOSMMapView.swift; sourceTree = "<group>"; };
+		BM01ML2F60000100000002 /* SketchMapLibreView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SketchMapLibreView.swift; sourceTree = "<group>"; };
 		BM01AS2F60000100000001 /* AssignedProjectsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssignedProjectsService.swift; sourceTree = "<group>"; };
 		BM01DS2F60000100000001 /* DeviceIdSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceIdSettingsView.swift; sourceTree = "<group>"; };
 		BM01SY2F60000100000001 /* ProjectSyncService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectSyncService.swift; sourceTree = "<group>"; };
+		BM01KF2F60000100000002 /* KalmanFilter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KalmanFilter.swift; sourceTree = "<group>"; };
+		BM01EX2F60000100000002 /* ExportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportService.swift; sourceTree = "<group>"; };
+		BM01SK2F60000100000002 /* MeasurementSketchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeasurementSketchView.swift; sourceTree = "<group>"; };
+		BM01PC2F60000100000002 /* PointCloudService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PointCloudService.swift; sourceTree = "<group>"; };
+		BM01SV2F60000100000002 /* Scan3DViewerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Scan3DViewerView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -158,9 +174,12 @@
 			isa = PBXGroup;
 			children = (
 				BM01AS2F60000100000001 /* AssignedProjectsService.swift */,
+				BM01EX2F60000100000002 /* ExportService.swift */,
+				BM01KF2F60000100000002 /* KalmanFilter.swift */,
 				BM01B92F60000100000009 /* LocationService.swift */,
 				BM01BA2F6000010000000A /* CameraService.swift */,
 				BM01BB2F6000010000000B /* StorageService.swift */,
+				BM01PC2F60000100000002 /* PointCloudService.swift */,
 				BM01SY2F60000100000001 /* ProjectSyncService.swift */,
 				BM01BC2F6000010000000C /* PDFService.swift */,
 				BM01BP2F60000100000016 /* PhotoLibraryService.swift */,
@@ -202,6 +221,7 @@
 			children = (
 				BM01BD2F6000010000000D /* MapView.swift */,
 				BM01OS2F60000100000002 /* OpenStreetMapView.swift */,
+				BM01OT2F60000100000002 /* OSMTileOverlay.swift */,
 			);
 			path = Map;
 			sourceTree = "<group>";
@@ -229,8 +249,12 @@
 			isa = PBXGroup;
 			children = (
 				BM01C12F60000100000011 /* MeasurementDetailView.swift */,
+				BM01SK2F60000100000002 /* MeasurementSketchView.swift */,
+				BM01SC2F60000100000002 /* SketchOSMMapView.swift */,
+				BM01ML2F60000100000002 /* SketchMapLibreView.swift */,
 				BM01P42F60000100000004 /* ProjectDetailView.swift */,
 				BM01S22F60000100000002 /* ShareSheet.swift */,
+				BM01SV2F60000100000002 /* Scan3DViewerView.swift */,
 			);
 			path = Detail;
 			sourceTree = "<group>";
@@ -251,6 +275,9 @@
 			dependencies = (
 			);
 			name = BauMeasurePro;
+			packageProductDependencies = (
+				BM01MLDEP000100000001 /* MapLibre */,
+			);
 			productName = BauMeasurePro;
 			productReference = BM01C32F60000100000013 /* BauMeasurePro.app */;
 			productType = "com.apple.product-type.application";
@@ -274,6 +301,9 @@
 				Base,
 			);
 			mainGroup = BM01E12F60000100000001;
+			packageReferences = (
+				BM01MLREF000100000001 /* XCRemoteSwiftPackageReference "maplibre-gl-native-distribution" */,
+			);
 			productRefGroup = BM01E32F60000100000003 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -311,6 +341,7 @@
 				BM01A92F60000100000009 /* LocationService.swift in Sources */,
 				BM01AA2F6000010000000A /* CameraService.swift in Sources */,
 				BM01AB2F6000010000000B /* StorageService.swift in Sources */,
+				BM01PC1F60000100000001 /* PointCloudService.swift in Sources */,
 				BM01AC2F6000010000000C /* PDFService.swift in Sources */,
 				BM01AP2F60000100000015 /* PhotoLibraryService.swift in Sources */,
 				BM01AD2F6000010000000D /* MapView.swift in Sources */,
@@ -325,9 +356,16 @@
 				BM01M12F60000100000001 /* ARMeshScanView.swift in Sources */,
 				BM01M32F60000100000003 /* SCNGeometry+ARMeshAnchor.swift in Sources */,
 				BM01OS1F60000100000001 /* OpenStreetMapView.swift in Sources */,
+				BM01OT1F60000100000001 /* OSMTileOverlay.swift in Sources */,
+				BM01SC1F60000100000001 /* SketchOSMMapView.swift in Sources */,
+				BM01ML1F60000100000001 /* SketchMapLibreView.swift in Sources */,
 				BM01AS1F60000100000001 /* AssignedProjectsService.swift in Sources */,
 				BM01DS1F60000100000001 /* DeviceIdSettingsView.swift in Sources */,
 				BM01SY1F60000100000001 /* ProjectSyncService.swift in Sources */,
+				BM01KF1F60000100000001 /* KalmanFilter.swift in Sources */,
+				BM01EX1F60000100000001 /* ExportService.swift in Sources */,
+				BM01SK1F60000100000001 /* MeasurementSketchView.swift in Sources */,
+				BM01SV1F60000100000001 /* Scan3DViewerView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -458,6 +496,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		BM01MLREF000100000001 /* XCRemoteSwiftPackageReference "maplibre-gl-native-distribution" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/maplibre/maplibre-gl-native-distribution";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 6.14.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		BM01MLDEP000100000001 /* MapLibre */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = BM01MLREF000100000001 /* XCRemoteSwiftPackageReference "maplibre-gl-native-distribution" */;
+			productName = MapLibre;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = BM01E12F60000100000000 /* Project object */;
 }

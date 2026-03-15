@@ -25,6 +25,7 @@ struct ProjectDetailView: View {
     @State private var syncErrorMessage: String?
     @State private var showSyncError = false
     @State private var showSyncSuccess = false
+    @State private var shareExportItem: ShareableExportItem?
 
     private let storage = StorageService()
     private var project: Project? {
@@ -120,6 +121,9 @@ struct ProjectDetailView: View {
                 .sheet(item: $sharePDFItem) { item in
                     ShareSheet(items: [item.url])
                 }
+                .sheet(item: $shareExportItem) { item in
+                    ShareSheet(items: [item.url])
+                }
                 .sheet(isPresented: $showEditProject) {
                     if let p = project {
                         EditProjectSheet(project: p) { updated in
@@ -145,7 +149,7 @@ struct ProjectDetailView: View {
                     if let scanId = pendingScanId, let p = project {
                         ARMeshScanView(
                             scanId: scanId,
-                            onSave: { path, lat, lon in
+                            onSave: { path, lat, lon, originX, originY, originZ in
                                 var updated = p
                                 let nextIndex = updated.threeDScans.count + 1
                                 let scan = ThreeDScan(
@@ -155,7 +159,10 @@ struct ProjectDetailView: View {
                                     filePath: path,
                                     note: nil,
                                     latitude: lat,
-                                    longitude: lon
+                                    longitude: lon,
+                                    sceneOriginX: originX,
+                                    sceneOriginY: originY,
+                                    sceneOriginZ: originZ
                                 )
                                 updated.threeDScans.append(scan)
                                 viewModel.updateProject(updated)
@@ -595,6 +602,28 @@ struct ProjectDetailView: View {
                         }
                     }
                 }
+
+                Section("Export (CAD / GIS)") {
+                    let coords = ExportService.routeCoordinates(for: p)
+                    if coords.count >= 2 {
+                        Button("Als GeoJSON exportieren") {
+                            if let url = ExportService.writeGeoJSONToTemp(project: p) {
+                                shareExportItem = ShareableExportItem(url: url)
+                            }
+                        }
+                        .disabled(coords.isEmpty)
+                        Button("Als DXF exportieren") {
+                            if let url = ExportService.writeDXFToTemp(project: p) {
+                                shareExportItem = ShareableExportItem(url: url)
+                            }
+                        }
+                        .disabled(coords.isEmpty)
+                    } else {
+                        Text("Mindestens 2 Punkte (Route) nötig für Export.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
             projectMapSection(for: p)
         }
@@ -615,10 +644,27 @@ struct ProjectDetailView: View {
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(scan.name)
                                         .font(.headline)
-                                    Text(scan.createdAt.formatted(date: .abbreviated, time: .shortened))
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
+                                    HStack(spacing: 6) {
+                                        Text(scan.createdAt.formatted(date: .abbreviated, time: .shortened))
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                        if scan.filePath.lowercased().hasSuffix(".ply") {
+                                            Text("Punktwolke")
+                                                .font(.caption2)
+                                                .foregroundStyle(.secondary)
+                                        }
+                                    }
                                 }
+                            }
+                            .listRowSeparator(.visible)
+                        }
+                        .onDelete { indexSet in
+                            let idsToDelete = indexSet.compactMap { idx -> UUID? in
+                                guard idx < p.threeDScans.count else { return nil }
+                                return p.threeDScans[idx].id
+                            }
+                            for id in idsToDelete {
+                                viewModel.deleteThreeDScan(projectId: projectId, scanId: id)
                             }
                         }
                     }
@@ -1191,93 +1237,62 @@ struct ShareablePDFItem: Identifiable {
     let url: URL
 }
 
-/// Einfacher 3D-Viewer für einen gespeicherten Scan. Mit Standort: Modell auf 3D-Karte an der entsprechenden Stelle.
-struct Scan3DViewerView: View {
-    let scan: ThreeDScan
-    private let storage = StorageService()
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                Section {
-                    SceneView(
-                        scene: loadScene(),
-                        pointOfView: nil,
-                        options: [.allowsCameraControl, .autoenablesDefaultLighting]
-                    )
-                    .frame(height: 280)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                } header: {
-                    Text("3D-Modell")
-                        .font(.headline)
-                }
-
-                if let lat = scan.latitude, let lon = scan.longitude {
-                    Section {
-                        ScanOnMap3DView(scan: scan, storage: storage)
-                            .frame(height: 260)
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
-                    } header: {
-                        Text("Standort auf 3D-Karte")
-                            .font(.headline)
-                    } footer: {
-                        Text("Standort: \(String(format: "%.6f", lat)), \(String(format: "%.6f", lon))")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-            .padding()
-        }
-        .navigationTitle(scan.name)
-        .navigationBarTitleDisplayMode(.inline)
-    }
-
-    private func loadScene() -> SCNScene {
-        let path = scan.filePath.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !path.isEmpty {
-            let fullPath = storage.fullPath(forStoredPath: path)
-            let url = URL(fileURLWithPath: fullPath)
-            if let loaded = try? SCNScene(url: url) {
-                return loaded
-            }
-        }
-        let scene = SCNScene()
-        let box = SCNBox(width: 1, height: 1, length: 1, chamferRadius: 0)
-        let node = SCNNode(geometry: box)
-        node.position = SCNVector3(0, 0, 0)
-        scene.rootNode.addChildNode(node)
-        return scene
-    }
+struct ShareableExportItem: Identifiable {
+    let id = UUID()
+    let url: URL
 }
 
-/// Zeigt das 3D-Scan-Modell an seiner GPS-Position auf einer 3D-Karte (Ground-Plane).
+/// Zeigt das 3D-Scan-Modell an seiner GPS-Position auf einer 2D-Luftbild-Karte als Boden-Layer.
 private struct ScanOnMap3DView: View {
     let scan: ThreeDScan
     let storage: StorageService
+    @State private var mapImage: UIImage?
 
     var body: some View {
         SceneView(
-            scene: buildMapScene(),
+            scene: buildMapScene(groundImage: mapImage),
             pointOfView: nil,
             options: [.allowsCameraControl, .autoenablesDefaultLighting]
         )
+        .onAppear { fetchLuftbildSnapshot() }
     }
 
-    private func buildMapScene() -> SCNScene {
+    private func fetchLuftbildSnapshot() {
+        guard let lat = scan.latitude, let lon = scan.longitude else { return }
+        let center = CLLocationCoordinate2D(latitude: lat, longitude: lon)
+        let span = MKCoordinateSpan(latitudeDelta: 0.002, longitudeDelta: 0.002)
+        let region = MKCoordinateRegion(center: center, span: span)
+        let options = MKMapSnapshotter.Options()
+        options.region = region
+        options.size = CGSize(width: 512, height: 512)
+        options.mapType = .satellite
+        let snapshotter = MKMapSnapshotter(options: options)
+        snapshotter.start { snapshot, error in
+            guard let snapshot = snapshot else { return }
+            DispatchQueue.main.async { mapImage = snapshot.image }
+        }
+    }
+
+    private func buildMapScene(groundImage: UIImage?) -> SCNScene {
         let scene = SCNScene()
         let groundSize: CGFloat = 80
         let ground = SCNPlane(width: groundSize, height: groundSize)
-        ground.firstMaterial?.diffuse.contents = UIColor.systemGray5
+        ground.firstMaterial?.diffuse.contents = groundImage ?? UIColor.systemGray5
         ground.firstMaterial?.isDoubleSided = true
         let groundNode = SCNNode(geometry: ground)
         groundNode.eulerAngles = SCNVector3(-Float.pi / 2, 0, 0)
         groundNode.position = SCNVector3(0, 0, 0)
         scene.rootNode.addChildNode(groundNode)
-        let grid = createGridNode(size: groundSize)
-        scene.rootNode.addChildNode(grid)
+        if groundImage == nil {
+            let grid = createGridNode(size: groundSize)
+            scene.rootNode.addChildNode(grid)
+        }
         if let modelNode = loadScanModel() {
-            modelNode.position = SCNVector3(0, 0, 0)
+            if let ox = scan.sceneOriginX, let oy = scan.sceneOriginY, let oz = scan.sceneOriginZ {
+                modelNode.position = SCNVector3(-Float(ox), -Float(oy), -Float(oz))
+            } else {
+                modelNode.position = SCNVector3(0, 0, 0)
+            }
             scene.rootNode.addChildNode(modelNode)
         }
         return scene

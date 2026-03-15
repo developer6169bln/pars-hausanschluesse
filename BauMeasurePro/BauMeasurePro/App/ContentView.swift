@@ -66,6 +66,7 @@ struct ContentView: View {
                 }
             }
             viewModel.projects = loaded
+            Task { await removeProjectsDeletedOnServer() }
         }
         .onChange(of: viewModel.projects) { _, new in
             storage.saveProjects(new)
@@ -79,6 +80,27 @@ struct ContentView: View {
         .sheet(isPresented: $showDeviceIdSettings) {
             DeviceIdSettingsView(viewModel: viewModel, storage: storage)
         }
+    }
+
+    /// Entfernt in der App Projekte, die in der Admin-Web-App gelöscht wurden (Abgleich mit Server beim Start).
+    private func removeProjectsDeletedOnServer() async {
+        let deviceId = storage.deviceId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let base = storage.serverBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !deviceId.isEmpty, !base.isEmpty else { return }
+        do {
+            let fetched = try await AssignedProjectsService.fetchAssignedProjects(deviceId: deviceId, serverBaseURL: base)
+            await MainActor.run {
+                let fetchedServerIds = Set(fetched.compactMap { $0.serverProjectId })
+                let kept = viewModel.projects.filter { p in
+                    guard let sid = p.serverProjectId else { return true }
+                    return fetchedServerIds.contains(sid)
+                }
+                if kept.count != viewModel.projects.count {
+                    viewModel.projects = kept
+                    storage.saveProjects(kept)
+                }
+            }
+        } catch { }
     }
 
     private var openProjects: [Project] {
@@ -169,20 +191,10 @@ struct ContentView: View {
                         ForEach(openProjects) { p in
                             projectRow(p)
                         }
-                        .onDelete { indexSet in
-                            for index in indexSet {
-                                viewModel.deleteProject(id: openProjects[index].id)
-                            }
-                        }
                     }
                     Section("Abgeschlossene Aufträge") {
                         ForEach(closedProjects) { p in
                             projectRow(p)
-                        }
-                        .onDelete { indexSet in
-                            for index in indexSet {
-                                viewModel.deleteProject(id: closedProjects[index].id)
-                            }
                         }
                     }
                 }

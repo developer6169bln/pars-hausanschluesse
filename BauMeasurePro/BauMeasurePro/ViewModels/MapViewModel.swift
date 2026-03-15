@@ -33,6 +33,13 @@ class MapViewModel: ObservableObject {
         projects[i].measurements.removeAll { $0.id == measurementId }
     }
 
+    func deleteThreeDScan(projectId: UUID, scanId: UUID) {
+        guard let i = projects.firstIndex(where: { $0.id == projectId }) else { return }
+        var proj = projects[i]
+        proj.threeDScans.removeAll { $0.id == scanId }
+        projects[i] = proj
+    }
+
     func updateProject(_ project: Project) {
         guard let i = projects.firstIndex(where: { $0.id == project.id }) else { return }
         projects[i] = project

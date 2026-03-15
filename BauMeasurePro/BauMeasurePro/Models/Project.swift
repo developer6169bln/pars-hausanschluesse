@@ -65,12 +65,16 @@ struct ThreeDScan: Identifiable, Codable, Equatable {
     var id = UUID()
     var name: String
     var createdAt: Date
-    /// Pfad zur 3D-Datei im Documents-Ordner (z. B. .usdz oder .scn); aktuell Platzhalter.
+    /// Pfad zur 3D-Datei im Documents-Ordner: .ply = Punktwolke (LiDAR-Scan), .scn = Mesh.
     var filePath: String
     var note: String?
     /// Standort des Scans (GPS), für Darstellung auf 3D-Karte.
     var latitude: Double?
     var longitude: Double?
+    /// Referenzpunkt in der gespeicherten Szene (ARKit-Kamera beim Speichern); Verschiebung -origin bringt Scan auf Luftbild-Position.
+    var sceneOriginX: Double?
+    var sceneOriginY: Double?
+    var sceneOriginZ: Double?
 }
 
 struct Project: Identifiable, Codable, Equatable {

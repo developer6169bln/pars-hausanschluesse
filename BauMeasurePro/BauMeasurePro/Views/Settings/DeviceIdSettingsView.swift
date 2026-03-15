@@ -13,6 +13,7 @@ struct DeviceIdSettingsView: View {
     @State private var showError = false
     @State private var showSuccess = false
     @State private var loadedCount = 0
+    @State private var removedFromServerCount = 0
 
     var body: some View {
         NavigationStack {
@@ -75,12 +76,20 @@ struct DeviceIdSettingsView: View {
             } message: {
                 Text(errorMessage ?? "Unbekannter Fehler")
             }
-            .alert(loadedCount == 0 ? "Keine neuen Projekte" : "Projekte geladen", isPresented: $showSuccess) {
-                Button("OK", role: .cancel) { showSuccess = false; dismiss() }
+            .alert(loadedCount == 0 && removedFromServerCount == 0 ? "Keine Änderungen" : "Projekte aktualisiert", isPresented: $showSuccess) {
+                Button("OK", role: .cancel) { showSuccess = false; removedFromServerCount = 0; dismiss() }
             } message: {
-                Text(loadedCount == 0
-                    ? "Alle zugewiesenen Projekte sind bereits vorhanden. Vorhandene Projekte wurden nicht überschrieben."
-                    : "\(loadedCount) neues Projekt/Projekte vom Server hinzugefügt. Vorhandene wurden beibehalten.")
+                var parts: [String] = []
+                if removedFromServerCount > 0 {
+                    parts.append("\(removedFromServerCount) auf dem Server gelöschtes Projekt/Projekte wurden in der App entfernt.")
+                }
+                if loadedCount > 0 {
+                    parts.append("\(loadedCount) neues Projekt/Projekte vom Server hinzugefügt.")
+                }
+                if parts.isEmpty {
+                    parts.append("Alle zugewiesenen Projekte sind bereits vorhanden.")
+                }
+                Text(parts.joined(separator: " "))
             }
         }
     }
@@ -97,14 +106,20 @@ struct DeviceIdSettingsView: View {
                 let fetched = try await AssignedProjectsService.fetchAssignedProjects(deviceId: id, serverBaseURL: url)
                 await MainActor.run {
                     let existing = viewModel.projects
-                    let existingServerIds = Set(existing.compactMap { $0.serverProjectId })
+                    let fetchedServerIds = Set(fetched.compactMap { $0.serverProjectId })
+                    let existingAfterRemoval = existing.filter { p in
+                        guard let sid = p.serverProjectId else { return true }
+                        return fetchedServerIds.contains(sid)
+                    }
+                    let removedCount = existing.count - existingAfterRemoval.count
                     let newOnly = fetched.filter { proj in
                         guard let sid = proj.serverProjectId else { return true }
-                        return !existingServerIds.contains(sid)
+                        return !existingAfterRemoval.contains(where: { $0.serverProjectId == sid })
                     }
-                    viewModel.projects = existing + newOnly
+                    viewModel.projects = existingAfterRemoval + newOnly
                     storage.saveProjects(viewModel.projects)
                     loadedCount = newOnly.count
+                    removedFromServerCount = removedCount
                     showSuccess = true
                     isLoading = false
                 }
