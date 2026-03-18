@@ -1152,6 +1152,34 @@ function AuftragListe() {
                     style={{ width: '100%', textAlign: 'left', padding: '0.5rem 0', border: 'none', background: 'none', cursor: 'pointer', borderBottom: '1px solid #e2e8f0' }}
                   >
                     <strong>{p.name}</strong>
+                    {(() => {
+                      const measurementCount = Array.isArray(p.measurements) ? p.measurements.length : 0
+                      const isDone = !!p.auftragAbgeschlossen
+                      const ampel = isDone
+                        ? { color: '#22c55e', text: 'Erledigt', detail: 'Grün: erledigt' }
+                        : measurementCount > 0
+                          ? { color: '#f97316', text: 'Vor Ort', detail: 'Orange: Bautruppe ist vor Ort (es gibt Messungen)' }
+                          : { color: '#ef4444', text: 'Noch nicht bearbeitet', detail: 'Rot: noch nicht bearbeitet (keine Messungen)' }
+                      return (
+                        <span
+                          className="meta-chip"
+                          title={ampel.detail}
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem', marginLeft: '0.75rem' }}
+                        >
+                          <span
+                            style={{
+                              width: 10,
+                              height: 10,
+                              borderRadius: 999,
+                              background: ampel.color,
+                              display: 'inline-block',
+                              boxShadow: '0 0 0 2px rgba(255,255,255,0.4)',
+                            }}
+                          />
+                          {ampel.text}
+                        </span>
+                      )
+                    })()}
                     <span className="muted" style={{ marginLeft: '0.5rem' }}>
                       → Zugewiesen an: {p.assignedToUserId ? projectUserName(p.assignedToUserId) : '—'}
                     </span>
