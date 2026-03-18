@@ -1154,12 +1154,20 @@ function AuftragListe() {
                     <strong>{p.name}</strong>
                     {(() => {
                       const measurementCount = Array.isArray(p.measurements) ? p.measurements.length : 0
-                      const isDone = !!p.auftragAbgeschlossen
-                      const ampel = isDone
+                      const status = (p.ampelStatus || '').toString().trim().toLowerCase()
+                      const ampel = status === 'gruen' || status === 'grün'
                         ? { color: '#22c55e', text: 'Erledigt', detail: 'Grün: erledigt' }
-                        : measurementCount > 0
-                          ? { color: '#f97316', text: 'Vor Ort', detail: 'Orange: Bautruppe ist vor Ort (es gibt Messungen)' }
-                          : { color: '#ef4444', text: 'Noch nicht bearbeitet', detail: 'Rot: noch nicht bearbeitet (keine Messungen)' }
+                        : status === 'orange'
+                          ? { color: '#f97316', text: 'Vor Ort', detail: 'Orange: Bautruppe ist vor Ort' }
+                          : status === 'rot'
+                            ? { color: '#ef4444', text: 'Noch nicht bearbeitet', detail: 'Rot: noch nicht bearbeitet' }
+                            : (
+                              // Fallback (alte Logik): Orange wenn Messungen vorhanden, sonst Rot, Grün wenn abgeschlossen
+                              (p.auftragAbgeschlossen ? { color: '#22c55e', text: 'Erledigt', detail: 'Grün: erledigt' } : null) ||
+                              (measurementCount > 0
+                                ? { color: '#f97316', text: 'Vor Ort', detail: 'Orange: Bautruppe ist vor Ort (es gibt Messungen)' }
+                                : { color: '#ef4444', text: 'Noch nicht bearbeitet', detail: 'Rot: noch nicht bearbeitet (keine Messungen)' })
+                            )
                       return (
                         <span
                           className="meta-chip"
