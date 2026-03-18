@@ -791,6 +791,19 @@ function AuftragListe() {
     const pipes1 = (a.pipesFarbe1 || '').trim()
     const pipes2 = (a.pipesFarbe2 || '').trim()
     const addrLabel = [a.adresse, a.plz, a.ort].filter(Boolean).join(', ')
+
+    // Ampelsystem:
+    // Rot: noch nicht bearbeitet
+    // Orange: Bautruppe ist vor Ort
+    // Grün: erledigt
+    const isDone = isAbgeschlossen(a)
+    const isOnSite = !!a.ortsanwesenheit
+    const ampel = isDone
+      ? { color: '#22c55e', text: 'Erledigt', detail: 'Grün: erledigt' }
+      : isOnSite
+        ? { color: '#f97316', text: 'Vor Ort', detail: 'Orange: Bautruppe ist vor Ort' }
+        : { color: '#ef4444', text: 'Offen', detail: 'Rot: noch nicht bearbeitet' }
+
     return (
       <li key={a.id} className="list-item">
         <div>
@@ -806,6 +819,14 @@ function AuftragListe() {
             {terminText ? <span> · Termin: {terminText}</span> : null}
           </div>
           <div className="item-meta">
+            <span
+              className="meta-chip"
+              title={ampel.detail}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem' }}
+            >
+              <span style={{ width: 10, height: 10, borderRadius: 999, background: ampel.color, display: 'inline-block', boxShadow: '0 0 0 2px rgba(255,255,255,0.4)' }} />
+              {ampel.text}
+            </span>
             {(a.messungGraben != null && String(a.messungGraben).trim() !== '') ? (
               <span className="meta-chip">Messung Graben: {parseLaenge(a).toFixed(1)} m</span>
             ) : null}
