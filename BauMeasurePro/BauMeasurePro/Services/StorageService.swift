@@ -64,9 +64,9 @@ class StorageService {
 
     /// Speichert ein Bild lokal im App-Documents-Verzeichnis. Gibt nur den Dateinamen zurück (relativer Pfad),
     /// damit die Referenz nach App-Updates (Build & Run) weiterhin gültig bleibt.
-    /// Zusätzlich wird das Bild in das iOS-Fotoalbum "HA Messung" exportiert.
+    /// Optional wird das Bild in das iOS-Fotoalbum "HA Messung" exportiert.
     /// Wenn overlay gesetzt ist, wird unten ein transparenter Layer mit weißer Beschriftung gezeichnet.
-    func saveImage(_ image: UIImage, projectName: String? = nil, overlay: PhotoOverlayInfo? = nil) -> String? {
+    func saveImage(_ image: UIImage, projectName: String? = nil, overlay: PhotoOverlayInfo? = nil, exportToAlbum: Bool = true) -> String? {
         let imageToSave: UIImage
         if let ov = overlay {
             imageToSave = Self.drawPhotoOverlay(ov, on: image) ?? image
@@ -81,7 +81,9 @@ class StorageService {
         let url = dir.appendingPathComponent(name)
         do {
             try data.write(to: url)
-            PhotoLibraryService.saveToAlbum(image: imageToSave)
+            if exportToAlbum {
+                PhotoLibraryService.saveToAlbum(image: imageToSave)
+            }
             return name
         } catch {
             return nil

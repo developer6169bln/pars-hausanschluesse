@@ -26,20 +26,13 @@ struct ARMeasureView: View {
     /// true = Polylinie (mehrere Punkte), false = Einzelstrecke (A–B)
     @State private var isPolylineMode = false
     @State private var polylinePointCount = 0
-    @State private var polylineCoordinates: [CLLocationCoordinate2D] = []
+    @State private var polylinePointsState: [PolylinePoint] = []
     @State private var pendingPolylinePoints: [PolylinePoint]?
     @State private var pendingPolylineMeters: Double?
     @State private var polylineSegmentMeters: [Double] = []
     @State private var pendingPolylineSegmentMeters: [Double]?
-    /// Zwischenfotos für Polylinie (A, B, C, …), am Ende zum Gesamtbild zusammengefügt
-    @State private var intermediatePolylinePhotos: [UIImage] = []
-    @State private var requestIntermediateSnapshot = false
-    @State private var capturedIntermediateImage: UIImage?
-
-    /// Beim Speichern der Messung gesetzter 3D-Scan-Pfad (Standard-Mesh .scn); wird danach dem Projekt hinzugefügt und zurückgesetzt.
-    @State private var savedPointCloudPath: String?
-    /// Mesh-Bereiche während der Messung (Live-Anzeige, wenn LiDAR aktiv).
-    @State private var meshAnchorsCountDuringMeasure: Int = 0
+    /// AR-Tracking-Status: „normal“, „limited“, „notAvailable“ – bei limited/notAvailable Warnung anzeigen.
+    @State private var trackingStateMessage: String = "normal"
 
     private var nextMeasurementIndex: Int {
         (viewModel.project(byId: projectId)?.measurements.count ?? 0) + 1
@@ -48,60 +41,39 @@ struct ARMeasureView: View {
     var body: some View {
         mainContent
             .onChange(of: capturedImage) { _, img in
-            guard let img = img else { return }
-            capturedImage = nil
-            if isPolylineMode, polylinePointCount >= 2 {
-                let allFrames = intermediatePolylinePhotos + [img]
-                pendingImage = allFrames.count > 1 ? combinePolylineImages(allFrames, totalMeters: distanceMeters) : img
-                intermediatePolylinePhotos.removeAll()
-                pendingPolylinePoints = polylineCoordinates.enumerated().map { _, coord in
-                    PolylinePoint(latitude: coord.latitude, longitude: coord.longitude)
+                guard let img = img else { return }
+                capturedImage = nil
+                if isPolylineMode, polylinePointCount >= 2 {
+                    pendingImage = img
+                    pendingPolylinePoints = self.polylinePointsState
+                    pendingPolylineMeters = distanceMeters
+                    pendingPolylineSegmentMeters = polylineSegmentMeters
+                    finishSaveWithCurrentPendingImage()
+                } else {
+                    pendingImage = img
+                    pendingPolylinePoints = nil
+                    pendingPolylineMeters = nil
+                    pendingPolylineSegmentMeters = nil
+                    finishSaveWithCurrentPendingImage()
                 }
-                pendingPolylineMeters = distanceMeters
-                pendingPolylineSegmentMeters = polylineSegmentMeters
-            } else {
-                pendingImage = img
-                pendingPolylinePoints = nil
-                pendingPolylineMeters = nil
-                pendingPolylineSegmentMeters = nil
-            }
-            saveARMeasurement(image: pendingImage ?? img, polylinePoints: pendingPolylinePoints, polylineMeters: pendingPolylineMeters, polylineSegmentMeters: pendingPolylineSegmentMeters)
-            if let path = savedPointCloudPath, let project = viewModel.project(byId: projectId) {
-                var updated = project
-                let nextIndex = updated.threeDScans.count + 1
-                let loc = locationService.location
-                updated.threeDScans.append(ThreeDScan(
-                    id: UUID(),
-                    name: "3D-Scan (Messung) \(nextIndex)",
-                    createdAt: Date(),
-                    filePath: path,
-                    note: nil,
-                    latitude: loc?.coordinate.latitude,
-                    longitude: loc?.coordinate.longitude,
-                    sceneOriginX: nil,
-                    sceneOriginY: nil,
-                    sceneOriginZ: nil
-                ))
-                viewModel.updateProject(updated)
-                savedPointCloudPath = nil
-            }
-            pendingImage = nil
-            pendingPolylinePoints = nil
-            pendingPolylineMeters = nil
-            pendingPolylineSegmentMeters = nil
-            resetForNewMeasurement()
-            showSavedAlert = true
-        }
-        .onChange(of: capturedIntermediateImage) { _, img in
-            guard let img = img else { return }
-            intermediatePolylinePhotos.append(img)
-            capturedIntermediateImage = nil
         }
         .alert("Gespeichert", isPresented: $showSavedAlert) {
             Button("OK", role: .cancel) { }
         } message: {
             Text("Die AR-Messung wurde dem Projekt hinzugefügt. Oberfläche & Verlegeart kannst du in den Messungsdetails nachträglich eintragen.")
         }
+    }
+
+    /// Speichert die Messung mit dem aktuell vorbereiteten `pendingImage` / Polyline-Daten (reine AR-Messung, kein 3D-Scan).
+    private func finishSaveWithCurrentPendingImage() {
+        guard let baseImage = pendingImage else { return }
+        saveARMeasurement(image: baseImage, polylinePoints: pendingPolylinePoints, polylineMeters: pendingPolylineMeters, polylineSegmentMeters: pendingPolylineSegmentMeters)
+        pendingImage = nil
+        pendingPolylinePoints = nil
+        pendingPolylineMeters = nil
+        pendingPolylineSegmentMeters = nil
+        resetForNewMeasurement()
+        showSavedAlert = true
     }
 
     private var mainContent: some View {
@@ -125,8 +97,19 @@ struct ARMeasureView: View {
             isPolylineMode: isPolylineMode,
             polylinePointCount: $polylinePointCount,
             onPolyPointAdded: {
-                let coord = locationService.location?.coordinate ?? CLLocationCoordinate2D(latitude: 0, longitude: 0)
-                polylineCoordinates.append(coord)
+                let loc = locationService.location
+                let coord = loc?.coordinate ?? CLLocationCoordinate2D(latitude: 0, longitude: 0)
+                polylinePointsState.append(
+                    PolylinePoint(
+                        latitude: coord.latitude,
+                        longitude: coord.longitude,
+                        horizontalAccuracy: loc?.horizontalAccuracy,
+                        verticalAccuracy: loc?.verticalAccuracy,
+                        altitude: loc?.altitude,
+                        course: loc?.course,
+                        courseAccuracy: loc?.courseAccuracy
+                    )
+                )
             },
             onPolySegmentAdded: { meters in
                 polylineSegmentMeters.append(meters)
@@ -134,14 +117,9 @@ struct ARMeasureView: View {
             onPolySegmentRemoved: {
                 if !polylineSegmentMeters.isEmpty { polylineSegmentMeters.removeLast() }
             },
-            requestIntermediateSnapshot: $requestIntermediateSnapshot,
-            capturedIntermediateImage: $capturedIntermediateImage,
             storage: storage,
             projectId: projectId,
-            meshAnchorsCount: $meshAnchorsCountDuringMeasure,
-            on3DScanExported: { path in
-                savedPointCloudPath = path
-            }
+            onTrackingStateChange: { trackingStateMessage = $0 }
         )
         .ignoresSafeArea()
         .zIndex(0)
@@ -159,23 +137,15 @@ struct ARMeasureView: View {
     @ViewBuilder
     private var topOverlay: some View {
         VStack(spacing: 8) {
-            if ARWorldTrackingConfiguration.supportsSceneReconstruction(.meshWithClassification) || ARWorldTrackingConfiguration.supportsSceneReconstruction(.mesh) {
-                Text("LiDAR/Mesh + Anchors aktiv")
-                    .font(.caption2)
-                    .foregroundStyle(.white.opacity(0.9))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(.black.opacity(0.5))
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-            }
-            if meshAnchorsCountDuringMeasure > 0 {
-                Text("3D-Scan (Standard): \(meshAnchorsCountDuringMeasure) Mesh-Bereiche (wird mit Messung gespeichert)")
-                    .font(.caption2)
-                    .foregroundStyle(.white.opacity(0.95))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(.blue.opacity(0.6))
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
+            if trackingStateMessage == "limited" || trackingStateMessage == "notAvailable" {
+                Text(trackingStateMessage == "limited"
+                     ? "Tracking eingeschränkt – Kamera langsam bewegen, mehr Textur/Struktur erfassen"
+                     : "Tracking nicht verfügbar – Gerät bewegen bis AR wieder erkannt")
+                    .font(.caption)
+                    .foregroundStyle(.white)
+                    .padding(8)
+                    .background(.orange.opacity(0.9))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
             }
             if raycastFailed {
                 Text("Keine Fläche erkannt – Kamera langsam bewegen und erneut tippen")
@@ -255,14 +225,6 @@ struct ARMeasureView: View {
                     }
                     .buttonStyle(.bordered)
                 }
-                if polylinePointCount >= 1 {
-                    Button {
-                        requestIntermediateSnapshot = true
-                    } label: {
-                        Label("Zwischenfoto", systemImage: "camera.fill")
-                    }
-                    .buttonStyle(.bordered)
-                }
                 if polylinePointCount >= 2 {
                     Button("Polymessung beenden") {
                         requestSnapshot = true
@@ -297,52 +259,9 @@ struct ARMeasureView: View {
         pointACounted = false
         raycastFailed = false
         polylinePointCount = 0
-        polylineCoordinates.removeAll()
+        polylinePointsState.removeAll()
         polylineSegmentMeters.removeAll()
-        intermediatePolylinePhotos.removeAll()
         sceneResetTrigger += 1
-    }
-
-    /// Führt Zwischenfotos + Schlussbild zu einem Gesamtbild A→B→C→… zusammen (horizontal, gleiche Höhe, Beschriftung).
-    private func combinePolylineImages(_ images: [UIImage], totalMeters: Double?) -> UIImage {
-        guard !images.isEmpty else { return UIImage() }
-        if images.count == 1 { return images[0] }
-        let labels = (0 ..< images.count).map { i in String(Unicode.Scalar(65 + i)!) }
-        let targetHeight: CGFloat = 400
-        let labelHeight: CGFloat = 28
-        let spacing: CGFloat = 4
-        var scaled: [(UIImage, width: CGFloat)] = []
-        for img in images {
-            let scale = targetHeight / img.size.height
-            let w = img.size.width * scale
-            scaled.append((img, w))
-        }
-        let totalWidth = scaled.map(\.width).reduce(0, +) + spacing * CGFloat(scaled.count - 1)
-        let maxWidth: CGFloat = 1600
-        let scaleDown = totalWidth > maxWidth ? maxWidth / totalWidth : 1
-        let finalHeight = scaleDown < 1 ? targetHeight * scaleDown + labelHeight : targetHeight + labelHeight
-        let finalWidth = scaleDown < 1 ? maxWidth : totalWidth
-        let renderer = UIGraphicsImageRenderer(size: CGSize(width: finalWidth, height: finalHeight))
-        return renderer.image { ctx in
-            UIColor.black.setFill()
-            ctx.fill(CGRect(origin: .zero, size: CGSize(width: finalWidth, height: finalHeight)))
-            var x: CGFloat = 0
-            let h = targetHeight * scaleDown
-            let font = UIFont.boldSystemFont(ofSize: min(14, 12 * scaleDown))
-            let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: UIColor.white]
-            for (i, (img, w)) in scaled.enumerated() {
-                let drawW = w * scaleDown
-                let rect = CGRect(x: x, y: 0, width: drawW, height: h)
-                img.draw(in: rect)
-                (labels[i] as NSString).draw(at: CGPoint(x: x + 4, y: h + 2), withAttributes: attrs)
-                x += drawW + spacing
-            }
-            if let m = totalMeters, m > 0 {
-                let totalText = String(format: "Gesamt: %.2f m", m)
-                let totalAttrs: [NSAttributedString.Key: Any] = [.font: UIFont.boldSystemFont(ofSize: 16), .foregroundColor: UIColor.white]
-                (totalText as NSString).draw(at: CGPoint(x: finalWidth - 120, y: 4), withAttributes: totalAttrs)
-            }
-        }
     }
 
     private func saveARMeasurement(image: UIImage, polylinePoints: [PolylinePoint]?, polylineMeters: Double?, polylineSegmentMeters: [Double]?) {
@@ -368,6 +287,11 @@ struct ARMeasureView: View {
         let loc = locationService.location
         let lat = loc?.coordinate.latitude ?? 0
         let lon = loc?.coordinate.longitude ?? 0
+        let horizAcc = loc?.horizontalAccuracy
+        let vertAcc = loc?.verticalAccuracy
+        let alt = loc?.altitude
+        let course = loc?.course
+        let courseAcc = loc?.courseAccuracy
         let firstPoly = polylinePoints?.first
         let lastPoly = polylinePoints?.last
 
@@ -376,6 +300,11 @@ struct ARMeasureView: View {
                 imagePath: path,
                 latitude: lat,
                 longitude: lon,
+                horizontalAccuracy: horizAcc,
+                verticalAccuracy: vertAcc,
+                altitude: alt,
+                course: course,
+                courseAccuracy: courseAcc,
                 address: address,
                 points: [],
                 totalDistance: 0,
@@ -411,6 +340,7 @@ struct ARMeasureView: View {
             addMeasurement(address: "Standort unbekannt")
         }
     }
+
 }
 
 // MARK: - ARSCNView mit Raycast, Punkten, Linie und Snapshot
@@ -430,12 +360,10 @@ struct ARMeasureSceneView: UIViewRepresentable {
     var onPolyPointAdded: () -> Void
     var onPolySegmentAdded: (Double) -> Void
     var onPolySegmentRemoved: () -> Void
-    @Binding var requestIntermediateSnapshot: Bool
-    @Binding var capturedIntermediateImage: UIImage?
     var storage: StorageService
     var projectId: UUID
-    @Binding var meshAnchorsCount: Int
-    var on3DScanExported: ((String?) -> Void)?
+    /// Wird aufgerufen bei Änderung des AR-Tracking-Status („normal“, „limited“, „notAvailable“).
+    var onTrackingStateChange: ((String) -> Void)?
 
     func makeUIView(context: Context) -> UIView {
         let container = UIView(frame: .zero)
@@ -447,22 +375,17 @@ struct ARMeasureSceneView: UIViewRepresentable {
         sceneView.autoenablesDefaultLighting = true
         sceneView.antialiasingMode = .multisampling4X
 
+        // Reine AR-Messung: nur Plane-Tracking + Raycast, kein LiDAR/Mesh (3D-Scan ausgeklammert).
         let config = ARWorldTrackingConfiguration()
+        config.worldAlignment = .gravity
         config.planeDetection = [.horizontal, .vertical]
         config.environmentTexturing = .automatic
-        if ARWorldTrackingConfiguration.supportsSceneReconstruction(.meshWithClassification) {
-            config.sceneReconstruction = .meshWithClassification
-        } else         if ARWorldTrackingConfiguration.supportsSceneReconstruction(.mesh) {
-            config.sceneReconstruction = .mesh
-        }
         sceneView.session.run(config)
 
         container.addSubview(sceneView)
-
-        let pathLineNode = SCNNode()
-        pathLineNode.name = "MeasurePathLineNode"
-        sceneView.scene.rootNode.addChildNode(pathLineNode)
-        context.coordinator.pathLineNode = pathLineNode
+        // SceneView immer in Containergröße halten; Zoom per Transform (verhindert riesige Snapshots + Layout-Jitter).
+        sceneView.frame = container.bounds
+        sceneView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
 
         let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleTap(_:)))
         container.addGestureRecognizer(tap)
@@ -471,8 +394,7 @@ struct ARMeasureSceneView: UIViewRepresentable {
         context.coordinator.sceneView = sceneView
         context.coordinator.storage = storage
         context.coordinator.projectId = projectId
-        context.coordinator.meshAnchorsCountBinding = $meshAnchorsCount
-        context.coordinator.on3DScanExported = on3DScanExported
+        context.coordinator.onTrackingStateChange = onTrackingStateChange
         return container
     }
 
@@ -480,37 +402,25 @@ struct ARMeasureSceneView: UIViewRepresentable {
         context.coordinator.parent = self
         context.coordinator.storage = storage
         context.coordinator.projectId = projectId
-        context.coordinator.meshAnchorsCountBinding = $meshAnchorsCount
-        context.coordinator.on3DScanExported = on3DScanExported
-        // Layout + Zoom: wir skalieren das ARSCNView innerhalb des Containers und croppen über clipsToBounds.
+        context.coordinator.onTrackingStateChange = onTrackingStateChange
+        // Zoom: nur per Transform anwenden (Frame bleibt stabil -> kein Zittern).
         if let sceneView = context.coordinator.sceneView {
             let z = max(1.0, min(zoomFactor, 2.0))
-            let w = container.bounds.width * z
-            let h = container.bounds.height * z
-            let x = (container.bounds.width - w) / 2
-            let y = (container.bounds.height - h) / 2
-            sceneView.frame = CGRect(x: x, y: y, width: w, height: h)
-            context.coordinator.currentZoomFactor = z
+            if abs(context.coordinator.currentZoomFactor - z) > 0.0001 {
+                context.coordinator.currentZoomFactor = z
+                // Transform um die Mitte, damit Zoom "in place" bleibt.
+                sceneView.transform = CGAffineTransform(scaleX: z, y: z)
+                sceneView.center = CGPoint(x: container.bounds.midX, y: container.bounds.midY)
+            }
         }
 
         if requestSnapshot {
             let distance = distanceMeters
             let coord = context.coordinator
-            let exportCallback = on3DScanExported
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                if let path = coord.exportMeshAndSave(storage: storage, scanId: UUID()) {
-                    exportCallback?(path)
-                }
                 let img = coord.sceneView?.snapshot() ?? UIImage()
                 capturedImage = addReadableOverlay(to: img, distance: distance)
                 requestSnapshot = false
-            }
-        }
-        if requestIntermediateSnapshot {
-            requestIntermediateSnapshot = false
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                let img = context.coordinator.sceneView?.snapshot() ?? UIImage()
-                capturedIntermediateImage = img
             }
         }
         if resetTrigger > 0, resetTrigger != context.coordinator.lastResetTrigger {
@@ -568,7 +478,12 @@ struct ARMeasureSceneView: UIViewRepresentable {
         var polyPointNodes: [SCNNode] = []
         var polyLineNodes: [SCNNode] = []
         var measurementAnchors: [ARAnchor] = []
+        /// Drift-Korrektur: alle ~20 m ein Anchor, damit ARKit die Strecke segmentweise stabil hält.
+        var segmentAnchors: [ARAnchor] = []
+        var lastSegmentAnchorDistanceM: Float = 0
         var distanceKalman: KalmanFilter?
+        var onTrackingStateChange: ((String) -> Void)?
+        var lastReportedTrackingState: String = ""
 
         weak var pathLineNode: SCNNode?
         var pathPositions: [simd_float3] = []
@@ -576,32 +491,26 @@ struct ARMeasureSceneView: UIViewRepresentable {
         var frameCount = 0
         var storage: StorageService?
         var projectId: UUID?
-        var meshAnchorsCountBinding: Binding<Int>?
-        var on3DScanExported: ((String?) -> Void)?
 
         init(_ parent: ARMeasureSceneView) {
             self.parent = parent
         }
 
         func session(_ session: ARSession, didUpdate frame: ARFrame) {
-            let camPos = simd_make_float3(frame.camera.transform.columns.3.x, frame.camera.transform.columns.3.y, frame.camera.transform.columns.3.z)
-            if let last = lastPathPosition {
-                if simd_distance(camPos, last) > 0.25 {
-                    pathPositions.append(camPos)
-                    lastPathPosition = camPos
-                    updateDashedPathLine()
-                }
-            } else {
-                pathPositions.append(camPos)
-                lastPathPosition = camPos
-                updateDashedPathLine()
-            }
-
             frameCount += 1
-            if frameCount % 10 == 0 {
-                let meshCount = frame.anchors.compactMap { $0 as? ARMeshAnchor }.count
+            // Tracking-Qualitätsindikator: nur bei Änderung melden.
+            let state = frame.camera.trackingState
+            let stateStr: String
+            switch state {
+            case .normal: stateStr = "normal"
+            case .limited: stateStr = "limited"
+            case .notAvailable: stateStr = "notAvailable"
+            @unknown default: stateStr = "unknown"
+            }
+            if stateStr != lastReportedTrackingState {
+                lastReportedTrackingState = stateStr
                 DispatchQueue.main.async { [weak self] in
-                    self?.meshAnchorsCountBinding?.wrappedValue = meshCount
+                    self?.onTrackingStateChange?(stateStr)
                 }
             }
         }
@@ -637,27 +546,6 @@ struct ARMeasureSceneView: UIViewRepresentable {
                     t += step
                 }
             }
-        }
-
-        func exportMeshAndSave(storage: StorageService, scanId: UUID) -> String? {
-            guard let view = sceneView, let frame = view.session.currentFrame else { return nil }
-            let meshAnchors = frame.anchors.compactMap { $0 as? ARMeshAnchor }
-            guard !meshAnchors.isEmpty else { return nil }
-            let orientation = view.window?.windowScene?.interfaceOrientation ?? .portrait
-            let scene = SCNScene()
-            for meshAnchor in meshAnchors {
-                let geo: SCNGeometry? = SCNGeometry.fromAnchor(meshAnchor: meshAnchor, frame: frame, orientation: orientation)
-                    ?? SCNGeometry.copyFromAnchor(meshAnchor: meshAnchor)
-                guard let geo = geo else { continue }
-                for mat in geo.materials {
-                    mat.transparency = 1.0
-                    mat.transparencyMode = .default
-                }
-                let node = SCNNode(geometry: geo)
-                node.simdTransform = meshAnchor.transform
-                scene.rootNode.addChildNode(node)
-            }
-            return storage.save3DScene(scene, scanId: scanId)
         }
 
         @objc func handleTap(_ gesture: UITapGestureRecognizer) {
@@ -731,16 +619,16 @@ struct ARMeasureSceneView: UIViewRepresentable {
             for i in 1 ..< polyPoints.count {
                 total += simd_distance(polyPoints[i - 1], polyPoints[i])
             }
+            // Drift-Korrektur: alle 20 m einen zusätzlichen Anchor setzen (Segment-Mapping).
+            let totalM = total
+            if totalM >= lastSegmentAnchorDistanceM + 20 {
+                let driftAnchor = ARAnchor(transform: first.worldTransform)
+                view.session.add(anchor: driftAnchor)
+                segmentAnchors.append(driftAnchor)
+                lastSegmentAnchorDistanceM = (totalM / 20).rounded(.down) * 20
+            }
             DispatchQueue.main.async {
-                let filtered: Double
-                if var k = self.distanceKalman {
-                    filtered = Double(k.update(measurement: total))
-                    self.distanceKalman = k
-                } else {
-                    self.distanceKalman = KalmanFilter(initialValue: total)
-                    filtered = Double(total)
-                }
-                self.parent.distanceMeters = filtered
+                self.parent.distanceMeters = Double(total)
                 self.parent.onPolyPointAdded()
                 self.parent.polylinePointCount = self.polyPoints.count
             }
@@ -893,12 +781,13 @@ struct ARMeasureSceneView: UIViewRepresentable {
 
         func clearMeasurementNodes() {
             distanceKalman = nil
+            lastSegmentAnchorDistanceM = 0
             if let session = sceneView?.session {
-                for anchor in measurementAnchors {
-                    session.remove(anchor: anchor)
-                }
+                for anchor in measurementAnchors { session.remove(anchor: anchor) }
+                for anchor in segmentAnchors { session.remove(anchor: anchor) }
             }
             measurementAnchors.removeAll()
+            segmentAnchors.removeAll()
             pointANode?.removeFromParentNode()
             pointBNode?.removeFromParentNode()
             lineNode?.removeFromParentNode()

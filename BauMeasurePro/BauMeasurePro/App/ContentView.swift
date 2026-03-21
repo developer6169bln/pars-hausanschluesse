@@ -28,9 +28,6 @@ struct ContentView: View {
     @State private var kolonnenList: [String] = []
     @State private var showAddKolonne = false
     @State private var newKolonneName = ""
-    @State private var reminderProject: Project?
-    @State private var showReminderOptions = false
-    @State private var showReminderSetAlert = false
     @State private var showDeviceIdSettings = false
 
     var body: some View {
@@ -131,15 +128,16 @@ struct ContentView: View {
             }
             .buttonStyle(.plain)
             Button {
-                reminderProject = p
-                showReminderOptions = true
+                markProjectWorkStarted(p)
             } label: {
-                Image(systemName: "bell")
-                    .font(.title3)
-                    .foregroundStyle(.orange)
+                Image(systemName: "play.circle.fill")
+                    .font(.system(size: 44))
+                    .foregroundStyle(.green)
             }
             .buttonStyle(.plain)
-            .disabled(p.termin == nil)
+            .padding(.vertical, 6)
+            .padding(.horizontal, 4)
+            .contentShape(Rectangle())
             NavigationLink {
                 ProjectDetailView(projectId: p.id)
                     .environmentObject(viewModel)
@@ -177,6 +175,25 @@ struct ContentView: View {
         }
     }
 
+    private func markProjectWorkStarted(_ project: Project) {
+        // Kein Start für fertige Projekte nötig.
+        if project.auftragAbgeschlossen == true { return }
+        if project.ampelStatus == "orange" { return }
+
+        var updated = project
+        updated.ampelStatus = "orange"
+        viewModel.updateProject(updated)
+
+        // Direkt an die Admin-Web-App senden, damit Ampel sofort sichtbar ist.
+        let base = storage.serverBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !base.isEmpty else { return }
+        Task {
+            if let synced = try? await ProjectSyncService.syncOrCreate(project: updated, storage: storage, serverBaseURL: base) {
+                await MainActor.run { viewModel.updateProject(synced) }
+            }
+        }
+    }
+
     private var projectList: some View {
         Group {
             if viewModel.projects.isEmpty {
@@ -210,21 +227,6 @@ struct ContentView: View {
                     Image(systemName: "gearshape")
                 }
             }
-        }
-        .confirmationDialog("Erinnerung setzen", isPresented: $showReminderOptions, presenting: reminderProject) { project in
-            if project.termin != nil {
-                Button("1 Stunde vorher") { scheduleReminder(for: project, offset: -3600); showReminderSetAlert = true }
-                Button("30 Minuten vorher") { scheduleReminder(for: project, offset: -1800); showReminderSetAlert = true }
-                Button("Zum Termin") { scheduleReminder(for: project, offset: 0); showReminderSetAlert = true }
-            }
-            Button("Abbrechen", role: .cancel) { reminderProject = nil }
-        } message: { project in
-            Text("Erinnerung für „\(project.name)“ setzen")
-        }
-        .alert("Erinnerung gesetzt", isPresented: $showReminderSetAlert) {
-            Button("OK") { showReminderSetAlert = false }
-        } message: {
-            Text("Sie werden zum gewählten Zeitpunkt benachrichtigt.")
         }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -420,37 +422,6 @@ struct ContentView: View {
             .fill(color)
             .frame(width: 14, height: 14)
             .overlay(RoundedRectangle(cornerRadius: 3).strokeBorder(.secondary.opacity(0.5), lineWidth: 1))
-    }
-
-    /// Legt eine lokale iOS-Erinnerung (Benachrichtigung) für den Projekt-Termin an.
-    private func scheduleReminder(for project: Project, offset: TimeInterval) {
-        defer { reminderProject = nil }
-        guard let date = project.termin else { return }
-        let triggerDate = date.addingTimeInterval(offset)
-
-        let center = UNUserNotificationCenter.current()
-        center.requestAuthorization(options: [.alert, .sound]) { granted, _ in
-            DispatchQueue.main.async {
-                if !granted { return }
-                if triggerDate <= Date() {
-                    showReminderSetAlert = false
-                    return
-                }
-                let content = UNMutableNotificationContent()
-                content.title = "Projekt-Termin"
-                if offset < 0 {
-                    content.body = "„\(project.name)“ – Termin in \(offset == -3600 ? "1 Stunde" : "30 Minuten")."
-                } else {
-                    content.body = "„\(project.name)“ – Termin jetzt."
-                }
-                content.sound = .default
-                let comps = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: triggerDate)
-                let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
-                let id = "project-\(project.id.uuidString)-\(Int(triggerDate.timeIntervalSince1970))"
-                let request = UNNotificationRequest(identifier: id, content: content, trigger: trigger)
-                center.add(request, withCompletionHandler: nil)
-            }
-        }
     }
 
     /// Öffnet Google Maps mit Navigation zur Projektadresse (Straße, Hausnummer, PLZ, Ort).

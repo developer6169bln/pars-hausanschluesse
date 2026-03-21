@@ -16,7 +16,7 @@ struct ARMeshScanView: View {
     var onSave: (String, Double?, Double?, Double?, Double?, Double?) -> Void
     var onCancel: () -> Void
 
-    @State private var scanProcedure: ScanProcedure = .pointCloud
+    @State private var scanProcedure: ScanProcedure = .mesh
     @State private var meshAnchorsCount = 0
     @State private var pointCloudCount = 0
     @State private var isSaving = false
@@ -25,6 +25,7 @@ struct ARMeshScanView: View {
     @State private var supportsMesh = true
     @State private var requestExport = false
     @StateObject private var locationService = LocationService()
+    @State private var trackingStateMessage: String = "normal"
 
     private let storage = StorageService()
 
@@ -43,6 +44,7 @@ struct ARMeshScanView: View {
                 pointCloudCount: $pointCloudCount,
                 supportsMesh: $supportsMesh,
                 requestExport: $requestExport,
+                trackingState: $trackingStateMessage,
                 scanId: scanId,
                 storage: storage,
                 getLocation: {
@@ -72,17 +74,14 @@ struct ARMeshScanView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                         .padding()
                 } else {
-                    Picker("Scan-Verfahren", selection: $scanProcedure) {
-                        ForEach(ScanProcedure.allCases, id: \.rawValue) { proc in
-                            Text(proc.rawValue).tag(proc)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .padding(.horizontal, 20)
-                    .padding(.top, 8)
-                    .onChange(of: scanProcedure) { _, _ in
-                        requestExport = false
-                    }
+                    Text("Scan-Verfahren: Mesh (Standard)")
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.9))
+                        .padding(.horizontal, 16)
+                        .padding(.top, 8)
+                        .padding(.vertical, 4)
+                        .background(.black.opacity(0.5))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
 
                     VStack(spacing: 6) {
                         Text("Bewege das Gerät langsam, um die Umgebung zu erfassen.")
@@ -92,19 +91,44 @@ struct ARMeshScanView: View {
                             .font(.caption2)
                             .foregroundStyle(.white.opacity(0.9))
                             .multilineTextAlignment(.center)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Vermessungs-Tipps:")
+                                .font(.caption2.bold())
+                                .foregroundStyle(.white)
+                            Text("• S-Pattern: Fläche in Zickzack abfahren (←←← / →→→ / ←←←) – LiDAR erhält mehr Winkel, bessere Genauigkeit.")
+                                .font(.caption2)
+                                .foregroundStyle(.white.opacity(0.9))
+                                .multilineTextAlignment(.leading)
+                            Text("• Baugrube: 3 Ebenen scannen – 1) Rand ablaufen, 2) halbe Höhe der Wände, 3) Boden – ergibt geschlossenes Mesh.")
+                                .font(.caption2)
+                                .foregroundStyle(.white.opacity(0.9))
+                                .multilineTextAlignment(.leading)
+                        }
+                        .padding(6)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(.black.opacity(0.4))
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
                     }
                     .padding(8)
                     .background(.black.opacity(0.6))
                     .clipShape(RoundedRectangle(cornerRadius: 8))
                     .padding(.top, 8)
-                    if scanProcedure == .pointCloud && pointCloudCount > 0 {
-                        Text("\(pointCloudCount) Punkte (RGB) erfasst")
-                            .font(.caption2)
-                            .foregroundStyle(.white.opacity(0.9))
-                    } else if scanProcedure == .mesh || meshAnchorsCount > 0 {
+                    if scanProcedure == .mesh || meshAnchorsCount > 0 {
                         Text("\(meshAnchorsCount) Mesh-Bereiche erfasst")
                             .font(.caption2)
                             .foregroundStyle(.white.opacity(0.9))
+                    }
+                    if trackingStateMessage == "limited" || trackingStateMessage == "notAvailable" {
+                        Text(trackingStateMessage == "limited"
+                             ? "Tracking eingeschränkt – langsam bewegen, mehr Struktur/Details erfassen"
+                             : "Tracking verloren – Gerät bewegen bis AR wieder stabil ist")
+                            .font(.caption2)
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(.orange.opacity(0.9))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            .padding(.top, 6)
                     }
                 }
                 Spacer()
@@ -141,6 +165,7 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
     @Binding var pointCloudCount: Int
     @Binding var supportsMesh: Bool
     @Binding var requestExport: Bool
+    @Binding var trackingState: String
     var scanId: UUID
     var storage: StorageService
     var getLocation: () -> (Double, Double)?
@@ -148,6 +173,7 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
 
     private func makeConfig(usePointCloud: Bool) -> ARWorldTrackingConfiguration {
         let config = ARWorldTrackingConfiguration()
+        config.worldAlignment = .gravity
         config.planeDetection = [.horizontal, .vertical]
         config.environmentTexturing = .automatic
         if ARWorldTrackingConfiguration.supportsSceneReconstruction(.meshWithClassification) {
@@ -177,6 +203,7 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
         context.coordinator.pointCloudCountBinding = $pointCloudCount
         context.coordinator.supportsMeshBinding = $supportsMesh
         context.coordinator.requestExportBinding = $requestExport
+        context.coordinator.trackingStateBinding = $trackingState
         context.coordinator.storage = storage
         context.coordinator.scanId = scanId
         context.coordinator.getLocation = getLocation
@@ -200,6 +227,7 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
 
     func updateUIView(_ sceneView: ARSCNView, context: Context) {
         context.coordinator.scanProcedure = scanProcedure
+        context.coordinator.trackingStateBinding = $trackingState
         if requestExport {
             context.coordinator.performExport()
         }
@@ -221,6 +249,7 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
         var pointCloudCountBinding: Binding<Int>?
         var supportsMeshBinding: Binding<Bool>?
         var requestExportBinding: Binding<Bool>?
+        var trackingStateBinding: Binding<String>?
         var knownMeshNodes: [UUID: SCNNode] = [:]
         var pointCloudNode: SCNNode?
         var pointCloudService: PointCloudService?
@@ -231,10 +260,28 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
         var scanId: UUID?
         var getLocation: (() -> (Double, Double)?)?
         var onExportDone: ((String?, Double?, Double?, Double?, Double?, Double?) -> Void)?
+        private var lastReportedTrackingState: String = ""
 
         private var lastGeometryUpdateTime: CFTimeInterval = 0
 
         func session(_ session: ARSession, didUpdate frame: ARFrame) {
+            // Tracking-Qualitätsindikator: nur bei Änderung melden.
+            let state = frame.camera.trackingState
+            let stateStr: String
+            switch state {
+            case .normal: stateStr = "normal"
+            case .limited: stateStr = "limited"
+            case .notAvailable: stateStr = "notAvailable"
+            @unknown default: stateStr = "unknown"
+            }
+            if stateStr != lastReportedTrackingState {
+                lastReportedTrackingState = stateStr
+                DispatchQueue.main.async { [weak self] in
+                    self?.trackingStateBinding?.wrappedValue = stateStr
+                }
+            }
+
+            // Punktwolke-Workflow unverändert
             guard scanProcedure == .pointCloud, let service = pointCloudService else { return }
             DispatchQueue.global(qos: .userInitiated).async { [weak service] in
                 service?.addPoints(from: frame)
@@ -309,13 +356,14 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
 
         func performExport() {
             requestExportBinding?.wrappedValue = false
-            guard let session = sceneView?.session,
+            guard let sceneView = sceneView,
                   let storage = storage,
                   let scanId = scanId,
                   let done = onExportDone else {
                 DispatchQueue.main.async { self.onExportDone?(nil, nil, nil, nil, nil, nil) }
                 return
             }
+            let session = sceneView.session
             guard let frame = session.currentFrame else {
                 DispatchQueue.main.async { done(nil, nil, nil, nil, nil, nil) }
                 return
@@ -342,25 +390,40 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
                 return
             }
 
-            let orientation = sceneView?.window?.windowScene?.interfaceOrientation ?? .portrait
+            // Mesh-Export kann sehr teuer sein (viele Anchors) → in den Background verschieben,
+            // damit die App nach dem Scan nicht durch Watchdog/Freeze abstürzt.
+            let orientation = sceneView.window?.windowScene?.interfaceOrientation ?? .portrait
             let meshAnchors = frame.anchors.compactMap { $0 as? ARMeshAnchor }
-            let scene = SCNScene()
-            for meshAnchor in meshAnchors {
-                let geo: SCNGeometry? = SCNGeometry.fromAnchor(meshAnchor: meshAnchor, frame: frame, orientation: orientation)
-                    ?? SCNGeometry.copyFromAnchor(meshAnchor: meshAnchor)
-                guard let geo = geo else { continue }
-                for mat in geo.materials {
-                    mat.transparency = 1.0
-                    mat.transparencyMode = .default
+            let storageCopy = storage
+            let scanIdCopy = scanId
+
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                autoreleasepool {
+                    let scene = SCNScene()
+                    var nodes: [SCNNode] = []
+                    nodes.reserveCapacity(meshAnchors.count)
+
+                    for meshAnchor in meshAnchors {
+                        let geo: SCNGeometry? = SCNGeometry.fromAnchor(meshAnchor: meshAnchor, frame: frame, orientation: orientation)
+                            ?? SCNGeometry.copyFromAnchor(meshAnchor: meshAnchor)
+                        guard let geo = geo?.optimized(triangleEdgeLimitMeters: 0.02) else { continue } // 2 cm
+                        for mat in geo.materials {
+                            mat.transparency = 1.0
+                            mat.transparencyMode = .default
+                        }
+                        let node = SCNNode(geometry: geo)
+                        node.simdTransform = meshAnchor.transform
+                        scene.rootNode.addChildNode(node)
+                        nodes.append(node)
+                    }
+
+                    let path = storageCopy.save3DScene(scene, scanId: scanIdCopy)
+                    DispatchQueue.main.async {
+                        done(path, loc?.0, loc?.1, originX, originY, originZ)
+                    }
                 }
-                let node = SCNNode(geometry: geo)
-                node.simdTransform = meshAnchor.transform
-                scene.rootNode.addChildNode(node)
-            }
-            let path = storage.save3DScene(scene, scanId: scanId)
-            DispatchQueue.main.async {
-                done(path, loc?.0, loc?.1, originX, originY, originZ)
             }
         }
     }
 }
+

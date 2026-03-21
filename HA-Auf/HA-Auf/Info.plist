@@ -5,11 +5,13 @@
     <key>CFBundleDevelopmentRegion</key>
     <string>$(DEVELOPMENT_LANGUAGE)</string>
     <key>CFBundleDisplayName</key>
-    <string>BauMeasure Pro</string>
+    <string>HA-Auf</string>
     <key>CFBundleExecutable</key>
     <string>$(EXECUTABLE_NAME)</string>
     <key>CFBundleIdentifier</key>
     <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
     <key>CFBundleName</key>
     <string>$(PRODUCT_NAME)</string>
     <key>CFBundlePackageType</key>
@@ -20,14 +22,6 @@
     <string>1</string>
     <key>LSRequiresIPhoneOS</key>
     <true/>
-    <key>NSLocationWhenInUseUsageDescription</key>
-    <string>Standort für Adresse und Kartenmarkierung der Messung.</string>
-    <key>NSCameraUsageDescription</key>
-    <string>Kamera für Foto-Messungen und AR-Messung.</string>
-    <key>NSPhotoLibraryUsageDescription</key>
-    <string>Fotos für Messungen auswählen und Export ins Album "HA Messung".</string>
-	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Fotos werden ins Album "HA Messung" gespeichert.</string>
     <key>UIApplicationSceneManifest</key>
     <dict>
         <key>UIApplicationSupportsMultipleScenes</key>
@@ -38,8 +32,6 @@
     <key>UIRequiredDeviceCapabilities</key>
     <array>
         <string>armv7</string>
-        <string>location-services</string>
-        <string>gps</string>
     </array>
 </dict>
 </plist>

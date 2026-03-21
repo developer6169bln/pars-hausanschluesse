@@ -3,6 +3,7 @@ import Foundation
 /// Synchronisiert ein Projekt (Messungen, Fotos, 3D-Scans, Abnahme, Bauhinderung) mit dem Admin-Server.
 enum ProjectSyncService {
 
+    /// Synchronisiert ein Projekt, das bereits eine `serverProjectId` hat.
     static func sync(project: Project, storage: StorageService, serverBaseURL: String) async throws {
         guard let serverId = project.serverProjectId, !serverId.isEmpty else {
             throw ProjectSyncError.noServerProjectId
@@ -24,6 +25,18 @@ enum ProjectSyncService {
                 baseURL: baseURL
             ) {
                 pathToURL[path] = url
+            }
+            // Zwischenfotos (punktbezogen) hochladen
+            for pp in (m.polylinePointPhotos ?? []) {
+                let p = pp.imagePath
+                if p.isEmpty || p.hasPrefix("http") { continue }
+                if let url = try? await uploadFile(
+                    localPath: storage.fullPath(forStoredPath: p),
+                    projectId: serverId,
+                    baseURL: baseURL
+                ) {
+                    pathToURL[p] = url
+                }
             }
         }
 
@@ -68,15 +81,40 @@ enum ProjectSyncService {
 
         // 4) Payload bauen und PATCH
         let payload = buildPatchPayload(project: project, urlFor: urlFor)
-        let patchURL = baseURL.appendingPathComponent("api/projects/\(serverId)")
-        var request = URLRequest(url: patchURL)
-        request.httpMethod = "PATCH"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = payload
+        let status = try await patchProject(projectId: serverId, payload: payload, baseURL: baseURL)
+        guard (200...299).contains(status) else {
+            throw ProjectSyncError.patchFailed(status: status)
+        }
+    }
 
-        let (_, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-            throw ProjectSyncError.patchFailed
+    /// Synchronisiert ein Projekt auch dann, wenn es lokal erstellt wurde (ohne `serverProjectId`).
+    /// In diesem Fall wird das Projekt beim ersten Sync auf dem Server angelegt (POST /api/projects)
+    /// und anschließend normal gepatcht (inkl. Uploads).
+    static func syncOrCreate(project: Project, storage: StorageService, serverBaseURL: String) async throws -> Project {
+        let base = serverBaseURL.trimmingCharacters(in: .whitespacesAndNewlines).hasSuffix("/")
+            ? String(serverBaseURL.trimmingCharacters(in: .whitespacesAndNewlines).dropLast())
+            : serverBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let baseURL = URL(string: base) else { throw ProjectSyncError.invalidServerURL }
+
+        // Stabil: Wir verwenden die lokale UUID als Server-ID, damit keine Duplikate entstehen.
+        var ensured = project
+        if ensured.serverProjectId == nil || ensured.serverProjectId?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == true {
+            ensured.serverProjectId = ensured.id.uuidString
+        }
+        let serverId = ensured.serverProjectId ?? ensured.id.uuidString
+
+        do {
+            try await sync(project: ensured, storage: storage, serverBaseURL: base)
+            return ensured
+        } catch let ProjectSyncError.patchFailed(status) where status == 404 {
+            // Projekt existiert noch nicht -> anlegen, dann erneut synchronisieren.
+            let createPayload = buildCreatePayload(project: ensured)
+            let createStatus = try await createProject(payload: createPayload, baseURL: baseURL)
+            guard (200...299).contains(createStatus) else {
+                throw ProjectSyncError.createFailed(status: createStatus)
+            }
+            try await sync(project: ensured, storage: storage, serverBaseURL: base)
+            return ensured
         }
     }
 
@@ -111,6 +149,60 @@ enum ProjectSyncService {
         return url
     }
 
+    private static func patchProject(projectId: String, payload: Data, baseURL: URL) async throws -> Int {
+        let patchURL = baseURL.appendingPathComponent("api/projects/\(projectId)")
+        var request = URLRequest(url: patchURL)
+        request.httpMethod = "PATCH"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = payload
+        let (_, response) = try await URLSession.shared.data(for: request)
+        return (response as? HTTPURLResponse)?.statusCode ?? 0
+    }
+
+    private static func createProject(payload: Data, baseURL: URL) async throws -> Int {
+        let url = baseURL.appendingPathComponent("api/projects")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = payload
+        let (_, response) = try await URLSession.shared.data(for: request)
+        return (response as? HTTPURLResponse)?.statusCode ?? 0
+    }
+
+    private static func buildCreatePayload(project: Project) -> Data {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        func iso(_ d: Date?) -> String? { d.map { formatter.string(from: $0) } }
+        func opt<T>(_ x: T?) -> Any { x ?? NSNull() }
+        // Wichtig: ID mitsenden, damit der Server dieses Projekt unter derselben UUID speichert.
+        let payload: [String: Any] = [
+            "id": project.serverProjectId ?? project.id.uuidString,
+            "name": project.name,
+            "createdAt": opt(iso(project.createdAt)),
+            "measurements": [],
+            "assignedToUserId": NSNull(),
+            "strasse": opt(project.strasse),
+            "hausnummer": opt(project.hausnummer),
+            "postleitzahl": opt(project.postleitzahl),
+            "ort": opt(project.ort),
+            "nvtNummer": opt(project.nvtNummer),
+            "kolonne": opt(project.kolonne),
+            "verbundGroesse": opt(project.verbundGroesse),
+            "verbundFarbe": opt(project.verbundFarbe),
+            "pipesFarbe1": opt(project.pipesFarbe1),
+            "pipesFarbe2": opt(project.pipesFarbe2),
+            "auftragAbgeschlossen": opt(project.auftragAbgeschlossen),
+            "ampelStatus": opt(project.ampelStatus),
+            "termin": opt(iso(project.termin)),
+            "googleDriveLink": opt(project.googleDriveLink),
+            "notizen": opt(project.notizen),
+            "kundeName": opt(project.kundeName),
+            "kundeTelefon": opt(project.kundeTelefon),
+            "kundeEmail": opt(project.kundeEmail),
+        ]
+        return (try? JSONSerialization.data(withJSONObject: payload)) ?? Data()
+    }
+
     private static func buildPatchPayload(project: Project, urlFor: (String?) -> String?) -> Data {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -135,12 +227,28 @@ enum ProjectSyncService {
                 measurementsArray.append(dict)
             } else {
                 let pointsArray = m.points.map { p in ["id": p.id.uuidString, "x": p.x, "y": p.y, "distance": p.distance] as [String: Any] }
-                let polylinePointsArray = (m.polylinePoints ?? []).map { p in ["id": p.id.uuidString, "latitude": p.latitude, "longitude": p.longitude] as [String: Any] }
+                let polylinePointsArray = (m.polylinePoints ?? []).map { p in
+                    [
+                        "id": p.id.uuidString,
+                        "latitude": p.latitude,
+                        "longitude": p.longitude,
+                        "horizontalAccuracy": opt(p.horizontalAccuracy),
+                        "verticalAccuracy": opt(p.verticalAccuracy),
+                        "altitude": opt(p.altitude),
+                        "course": opt(p.course),
+                        "courseAccuracy": opt(p.courseAccuracy),
+                    ] as [String: Any]
+                }
                 measurementsArray.append([
                     "id": m.id.uuidString,
                     "imagePath": urlFor(m.imagePath) ?? m.imagePath,
                     "latitude": m.latitude,
                     "longitude": m.longitude,
+                    "horizontalAccuracy": opt(m.horizontalAccuracy),
+                    "verticalAccuracy": opt(m.verticalAccuracy),
+                    "altitude": opt(m.altitude),
+                    "course": opt(m.course),
+                    "courseAccuracy": opt(m.courseAccuracy),
                     "address": m.address,
                     "points": pointsArray,
                     "totalDistance": m.totalDistance,
@@ -165,6 +273,19 @@ enum ProjectSyncService {
                     "sketchRotationDegrees": opt(m.sketchRotationDegrees),
                     "sketchScale": opt(m.sketchScale),
                     "sketchMirrored": m.sketchMirrored ?? false,
+                    "sketchUseARSegments": m.sketchUseARSegments ?? true,
+                    "sketchOverridePolylinePoints": (m.sketchOverridePolylinePoints ?? []).map { p in
+                        [
+                            "id": p.id.uuidString,
+                            "latitude": p.latitude,
+                            "longitude": p.longitude,
+                            "horizontalAccuracy": opt(p.horizontalAccuracy),
+                            "verticalAccuracy": opt(p.verticalAccuracy),
+                            "altitude": opt(p.altitude),
+                            "course": opt(p.course),
+                            "courseAccuracy": opt(p.courseAccuracy),
+                        ] as [String: Any]
+                    },
                 ])
             }
         }
@@ -226,6 +347,7 @@ enum ProjectSyncService {
             "pipesFarbe1": opt(project.pipesFarbe1),
             "pipesFarbe2": opt(project.pipesFarbe2),
             "auftragAbgeschlossen": opt(project.auftragAbgeschlossen),
+            "ampelStatus": opt(project.ampelStatus),
             "termin": opt(iso(project.termin)),
             "googleDriveLink": opt(project.googleDriveLink),
             "notizen": opt(project.notizen),
@@ -255,7 +377,8 @@ enum ProjectSyncError: LocalizedError {
     case invalidServerURL
     case fileNotFound(String)
     case uploadFailed
-    case patchFailed
+    case patchFailed(status: Int)
+    case createFailed(status: Int)
 
     var errorDescription: String? {
         switch self {
@@ -263,7 +386,8 @@ enum ProjectSyncError: LocalizedError {
         case .invalidServerURL: return "Ungültige Server-URL."
         case .fileNotFound(let p): return "Datei nicht gefunden: \(p)"
         case .uploadFailed: return "Hochladen fehlgeschlagen."
-        case .patchFailed: return "Aktualisieren auf dem Server fehlgeschlagen."
+        case .patchFailed(let s): return "Aktualisieren auf dem Server fehlgeschlagen (Status \(s))."
+        case .createFailed(let s): return "Projekt konnte auf dem Server nicht angelegt werden (Status \(s))."
         }
     }
 }

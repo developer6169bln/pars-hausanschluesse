@@ -79,19 +79,23 @@ struct DeviceIdSettingsView: View {
             .alert(loadedCount == 0 && removedFromServerCount == 0 ? "Keine Änderungen" : "Projekte aktualisiert", isPresented: $showSuccess) {
                 Button("OK", role: .cancel) { showSuccess = false; removedFromServerCount = 0; dismiss() }
             } message: {
-                var parts: [String] = []
-                if removedFromServerCount > 0 {
-                    parts.append("\(removedFromServerCount) auf dem Server gelöschtes Projekt/Projekte wurden in der App entfernt.")
-                }
-                if loadedCount > 0 {
-                    parts.append("\(loadedCount) neues Projekt/Projekte vom Server hinzugefügt.")
-                }
-                if parts.isEmpty {
-                    parts.append("Alle zugewiesenen Projekte sind bereits vorhanden.")
-                }
-                Text(parts.joined(separator: " "))
+                Text(successAlertMessage)
             }
         }
+    }
+
+    private var successAlertMessage: String {
+        var parts: [String] = []
+        if removedFromServerCount > 0 {
+            parts.append("\(removedFromServerCount) auf dem Server gelöschtes Projekt/Projekte wurden in der App entfernt.")
+        }
+        if loadedCount > 0 {
+            parts.append("\(loadedCount) neues Projekt/Projekte vom Server hinzugefügt.")
+        }
+        if parts.isEmpty {
+            parts.append("Alle zugewiesenen Projekte sind bereits vorhanden.")
+        }
+        return parts.joined(separator: " ")
     }
 
     private func saveAndLoad() {

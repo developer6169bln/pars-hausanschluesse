@@ -99,6 +99,9 @@ struct Project: Identifiable, Codable, Equatable {
     var pipesFarbe2: String?
     /// Optional für Abwärtskompatibilität; in der UI als false anzeigen wenn nil.
     var auftragAbgeschlossen: Bool?
+    /// Ampel-Status für den aktuellen Arbeitsfortschritt in der Admin-Web-App.
+    /// Werte: `rot`, `orange`, `gruen` (optional; bei nil wird im Web-UI ggf. fallback genutzt).
+    var ampelStatus: String?
     var termin: Date?
     var googleDriveLink: String?
     var notizen: String?
@@ -140,6 +143,7 @@ struct Project: Identifiable, Codable, Equatable {
         pipesFarbe1: String? = nil,
         pipesFarbe2: String? = nil,
         auftragAbgeschlossen: Bool? = false,
+        ampelStatus: String? = nil,
         termin: Date? = nil,
         googleDriveLink: String? = nil,
         notizen: String? = nil,
@@ -175,6 +179,7 @@ struct Project: Identifiable, Codable, Equatable {
         self.pipesFarbe1 = pipesFarbe1
         self.pipesFarbe2 = pipesFarbe2
         self.auftragAbgeschlossen = auftragAbgeschlossen
+        self.ampelStatus = ampelStatus
         self.termin = termin
         self.googleDriveLink = googleDriveLink
         self.notizen = notizen

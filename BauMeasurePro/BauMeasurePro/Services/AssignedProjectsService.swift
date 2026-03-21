@@ -64,6 +64,7 @@ private struct ApiProject: Decodable {
     let pipesFarbe1: String?
     let pipesFarbe2: String?
     let auftragAbgeschlossen: Bool?
+    let ampelStatus: String?
     let termin: String?
     let googleDriveLink: String?
     let notizen: String?
@@ -98,6 +99,7 @@ private struct ApiProject: Decodable {
             pipesFarbe1: pipesFarbe1,
             pipesFarbe2: pipesFarbe2,
             auftragAbgeschlossen: auftragAbgeschlossen,
+            ampelStatus: ampelStatus,
             termin: termDate,
             googleDriveLink: googleDriveLink,
             notizen: notizen,
@@ -113,6 +115,11 @@ private struct ApiPolylinePoint: Decodable {
     let id: String?
     let latitude: Double?
     let longitude: Double?
+    let horizontalAccuracy: Double?
+    let verticalAccuracy: Double?
+    let altitude: Double?
+    let course: Double?
+    let courseAccuracy: Double?
 }
 
 private struct ApiMeasurement: Decodable {
@@ -120,6 +127,11 @@ private struct ApiMeasurement: Decodable {
     let imagePath: String?
     let latitude: Double?
     let longitude: Double?
+    let horizontalAccuracy: Double?
+    let verticalAccuracy: Double?
+    let altitude: Double?
+    let course: Double?
+    let courseAccuracy: Double?
     let address: String?
     let points: [ApiPhotoPoint]?
     let totalDistance: Double?
@@ -144,21 +156,54 @@ private struct ApiMeasurement: Decodable {
     let sketchRotationDegrees: Double?
     let sketchScale: Double?
     let sketchMirrored: Bool?
+    let sketchOverridePolylinePoints: [ApiPolylinePoint]?
+    let sketchUseARSegments: Bool?
+    let polylinePointPhotos: [ApiPolylinePointPhoto]?
 
     func toMeasurement() -> Measurement {
         let poly: [PolylinePoint]? = (polylinePoints ?? []).isEmpty ? nil : (polylinePoints?.map { p in
             PolylinePoint(
                 id: (p.id.flatMap { UUID(uuidString: $0) }) ?? UUID(),
                 latitude: p.latitude ?? 0,
-                longitude: p.longitude ?? 0
+                longitude: p.longitude ?? 0,
+                horizontalAccuracy: p.horizontalAccuracy,
+                verticalAccuracy: p.verticalAccuracy,
+                altitude: p.altitude,
+                course: p.course,
+                courseAccuracy: p.courseAccuracy
+            )
+        })
+        let sketchOverride: [PolylinePoint]? = (sketchOverridePolylinePoints ?? []).isEmpty ? nil : (sketchOverridePolylinePoints?.map { p in
+            PolylinePoint(
+                id: (p.id.flatMap { UUID(uuidString: $0) }) ?? UUID(),
+                latitude: p.latitude ?? 0,
+                longitude: p.longitude ?? 0,
+                horizontalAccuracy: p.horizontalAccuracy,
+                verticalAccuracy: p.verticalAccuracy,
+                altitude: p.altitude,
+                course: p.course,
+                courseAccuracy: p.courseAccuracy
             )
         })
         let segMeters: [Double]? = (polylineSegmentMeters ?? []).isEmpty ? nil : polylineSegmentMeters
+        let pointPhotos: [PolylinePointPhoto]? = (polylinePointPhotos ?? []).isEmpty ? nil : (polylinePointPhotos?.map { x in
+            PolylinePointPhoto(
+                id: (x.id.flatMap { UUID(uuidString: $0) }) ?? UUID(),
+                pointIndex: x.pointIndex ?? 0,
+                imagePath: x.imagePath ?? "",
+                date: (x.date.flatMap { ISO8601DateFormatter().date(from: $0) }) ?? Date()
+            )
+        })
         return Measurement(
             id: (id.flatMap { UUID(uuidString: $0) }) ?? UUID(),
             imagePath: imagePath ?? "",
             latitude: latitude ?? 0,
             longitude: longitude ?? 0,
+            horizontalAccuracy: horizontalAccuracy,
+            verticalAccuracy: verticalAccuracy,
+            altitude: altitude,
+            course: course,
+            courseAccuracy: courseAccuracy,
             address: address ?? "",
             points: (points ?? []).map { $0.toPhotoPoint() },
             totalDistance: totalDistance ?? 0,
@@ -182,9 +227,19 @@ private struct ApiMeasurement: Decodable {
             sketchOffsetLon: sketchOffsetLon,
             sketchRotationDegrees: sketchRotationDegrees,
             sketchScale: sketchScale,
-            sketchMirrored: sketchMirrored
+            sketchMirrored: sketchMirrored,
+            sketchOverridePolylinePoints: sketchOverride,
+            sketchUseARSegments: sketchUseARSegments,
+            polylinePointPhotos: pointPhotos
         )
     }
+}
+
+private struct ApiPolylinePointPhoto: Decodable {
+    let id: String?
+    let pointIndex: Int?
+    let imagePath: String?
+    let date: String?
 }
 
 private struct ApiPhotoPoint: Decodable {

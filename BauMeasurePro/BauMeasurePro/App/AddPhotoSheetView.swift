@@ -2,7 +2,8 @@ import SwiftUI
 
 struct AddPhotoSheetView: View {
     let projectId: UUID
-    var onDismiss: () -> Void = {}
+    /// Wird nach erfolgreichem Speichern mit der neuen Foto-Messung aufgerufen; bei Abbruch `nil`.
+    var onDismiss: (Measurement?) -> Void = { _ in }
 
     @EnvironmentObject var viewModel: MapViewModel
     @Environment(\.dismiss) private var dismiss
@@ -29,7 +30,7 @@ struct AddPhotoSheetView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Abbrechen") { doDismiss() }
+                    Button("Abbrechen") { doDismiss(saved: nil) }
                 }
                 if pickedImage != nil {
                     ToolbarItem(placement: .confirmationAction) {
@@ -159,9 +160,15 @@ struct AddPhotoSheetView: View {
         )
         guard let img = pickedImage,
               let path = storage.saveImage(img, projectName: projectName, overlay: overlay) else { return }
-        // Für reine Foto-Messungen keine GPS-Koordinaten speichern.
-        let lat: Double = 0
-        let lon: Double = 0
+        // GPS-Daten: optional erfassen (wenn vorhanden).
+        let loc = locationService.location
+        let lat: Double = loc?.coordinate.latitude ?? 0
+        let lon: Double = loc?.coordinate.longitude ?? 0
+        let horizAcc = loc?.horizontalAccuracy
+        let vertAcc = loc?.verticalAccuracy
+        let alt = loc?.altitude
+        let course = loc?.course
+        let courseAcc = loc?.courseAccuracy
         let (totalPx, segmentPx) = distanceFromPoints(measurePoints)
         var photoPoints: [PhotoPoint] = []
         for (i, pt) in measurePoints.enumerated() {
@@ -174,6 +181,11 @@ struct AddPhotoSheetView: View {
             imagePath: path,
             latitude: lat,
             longitude: lon,
+            horizontalAccuracy: horizAcc,
+            verticalAccuracy: vertAcc,
+            altitude: alt,
+            course: course,
+            courseAccuracy: courseAcc,
             address: currentAddress,
             points: photoPoints,
             totalDistance: totalPx,
@@ -186,12 +198,12 @@ struct AddPhotoSheetView: View {
         }
         // Foto-Messungen: keine Start-/End-GPS-Koordinaten.
         viewModel.addMeasurement(toProjectId: projectId, m)
-        doDismiss()
+        doDismiss(saved: m)
     }
 
-    private func doDismiss() {
+    private func doDismiss(saved: Measurement?) {
         reset()
-        onDismiss()
+        onDismiss(saved)
         dismiss()
     }
 
