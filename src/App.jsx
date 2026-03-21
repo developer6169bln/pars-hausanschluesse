@@ -32,6 +32,86 @@ const VERLEGEART_OPTIONS = [
   'Einblasen / Einziehen der Pipe in vorhandene Trasse', 'Verlegung im Schutzrohr', 'Sonstige Verlegeart'
 ]
 
+/** Messung = Kartenfoto der Route (aus BauMeasurePro: „Skizze erstellen“ → Speichern). */
+function isKartenfotoRouteMeasurement(m) {
+  const addr = (m?.address || '').toString().toLowerCase()
+  return addr.includes('kartenfoto') && addr.includes('route')
+}
+
+/** GPS-Punkte der Polylinie (Override > Polylinie > nur Start/Ende) – wie in der iOS-App. */
+function measurementGpsPolyline(m) {
+  if (!m || typeof m !== 'object') return []
+  const ov = m.sketchOverridePolylinePoints
+  if (Array.isArray(ov) && ov.length > 0) {
+    return ov.map((p) => ({ lat: Number(p.latitude), lon: Number(p.longitude) })).filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lon))
+  }
+  const poly = m.polylinePoints
+  if (Array.isArray(poly) && poly.length > 0) {
+    return poly.map((p) => ({ lat: Number(p.latitude), lon: Number(p.longitude) })).filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lon))
+  }
+  const pts = []
+  if (m.startLatitude != null && m.startLongitude != null) {
+    pts.push({ lat: Number(m.startLatitude), lon: Number(m.startLongitude) })
+  }
+  if (m.endLatitude != null && m.endLongitude != null) {
+    pts.push({ lat: Number(m.endLatitude), lon: Number(m.endLongitude) })
+  }
+  return pts.filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lon))
+}
+
+function bboxWithPadding(points, padRatio = 0.08) {
+  if (!points || points.length === 0) return null
+  let minLat = Infinity
+  let maxLat = -Infinity
+  let minLon = Infinity
+  let maxLon = -Infinity
+  for (const p of points) {
+    minLat = Math.min(minLat, p.lat)
+    maxLat = Math.max(maxLat, p.lat)
+    minLon = Math.min(minLon, p.lon)
+    maxLon = Math.max(maxLon, p.lon)
+  }
+  const dLat = maxLat - minLat || 1e-6
+  const dLon = maxLon - minLon || 1e-6
+  const pLat = dLat * padRatio
+  const pLon = dLon * padRatio
+  return { minLat: minLat - pLat, maxLat: maxLat + pLat, minLon: minLon - pLon, maxLon: maxLon + pLon }
+}
+
+function gpsToPercent(lat, lon, bbox) {
+  const { minLat, maxLat, minLon, maxLon } = bbox
+  const x = (lon - minLon) / (maxLon - minLon)
+  const y = (maxLat - lat) / (maxLat - minLat)
+  return { left: x * 100, top: y * 100 }
+}
+
+/** Ordnet dem Kartenfoto die AR-Messung zu (Start/Ende-GPS ≈ Polylinie Anfang/Ende). */
+function findArMeasurementForKartenfoto(kartenMeas, allMeasurements) {
+  const arList = (allMeasurements || []).filter((x) => x && x.isARMeasurement)
+  const sLat = kartenMeas?.startLatitude
+  const sLon = kartenMeas?.startLongitude
+  const eLat = kartenMeas?.endLatitude
+  const eLon = kartenMeas?.endLongitude
+  const eps = 0.0003
+  if (sLat != null && sLon != null && eLat != null && eLon != null) {
+    for (const ar of arList) {
+      const pl = measurementGpsPolyline(ar)
+      if (pl.length < 2) continue
+      const f = pl[0]
+      const l = pl[pl.length - 1]
+      if (
+        Math.abs(f.lat - sLat) < eps &&
+        Math.abs(f.lon - sLon) < eps &&
+        Math.abs(l.lat - eLat) < eps &&
+        Math.abs(l.lon - eLon) < eps
+      ) {
+        return ar
+      }
+    }
+  }
+  return arList.find((a) => Array.isArray(a.polylinePointPhotos) && a.polylinePointPhotos.length > 0) || null
+}
+
 function getAttachmentSrc(item) {
   return item?.url || item?.dataUrl || ''
 }
@@ -1354,6 +1434,157 @@ function AuftragListe() {
                                 <a href={imgUrl} target="_blank" rel="noopener noreferrer" download style={{ marginLeft: 'auto', fontSize: '0.75rem' }}>Download</a>
                               )}
                             </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )
+                })()}
+
+                <h3 className="project-detail-section">Kartenfoto & Punkt-Fotos</h3>
+                <p className="muted" style={{ marginTop: '-0.25rem', marginBottom: '0.75rem', fontSize: '0.9rem' }}>
+                  Auf dem Kartenfoto (Route) können Messpunkte A, B, C … angetippt werden, wenn in der App dieser Strecke Fotos zugeordnet wurden. Die Lage ergibt sich aus der GPS-Polylinie der passenden AR-Messung (gleiches Start/Ende wie beim Speichern der Skizze).
+                </p>
+                {(() => {
+                  const kartenList = measurements.filter(isKartenfotoRouteMeasurement)
+                  if (kartenList.length === 0) {
+                    return <p className="muted">Kein Kartenfoto (Route) – in BauMeasurePro unter einer AR-Messung „Skizze erstellen (Luftbild)“ speichern.</p>
+                  }
+                  return (
+                    <div style={{ marginBottom: '1rem' }}>
+                      {kartenList.map((km, ki) => {
+                        const mapUrl = projectAssetUrl(km.imagePath || km.imageUrl)
+                        const ar = findArMeasurementForKartenfoto(km, measurements)
+                        const photos = Array.isArray(ar?.polylinePointPhotos) ? ar.polylinePointPhotos : []
+                        const poly = ar ? measurementGpsPolyline(ar) : []
+                        const bbox = bboxWithPadding(poly)
+                        const photoByIndex = new Map()
+                        for (const pp of photos) {
+                          const idx = Number(pp.pointIndex)
+                          if (!Number.isFinite(idx) || idx < 0) continue
+                          const u = projectAssetUrl(pp.imagePath)
+                          if (u) photoByIndex.set(idx, u)
+                        }
+                        const hasLine = bbox && poly.length >= 2
+                        const hasMarkers = hasLine && photoByIndex.size > 0
+                        return (
+                          <div
+                            key={km.id || `karten-${ki}`}
+                            style={{
+                              marginBottom: '1.25rem',
+                              border: '1px solid #e2e8f0',
+                              borderRadius: 8,
+                              padding: '0.75rem',
+                              background: '#fafafa',
+                            }}
+                          >
+                            <p style={{ margin: '0 0 0.5rem', fontSize: '0.9rem' }}>
+                              <strong>Luftbild / Route</strong>
+                              {ar && (
+                                <span className="muted" style={{ marginLeft: '0.5rem' }}>
+                                  → AR-Messung {ar.index != null ? ar.index : '…'} ({poly.length} Punkte)
+                                </span>
+                              )}
+                              {!ar && (
+                                <span className="muted" style={{ marginLeft: '0.5rem' }}>
+                                  Keine AR-Messung mit passendem Start/Ende-GPS gefunden.
+                                </span>
+                              )}
+                            </p>
+                            {!mapUrl && <p className="muted">Keine Bilddatei für dieses Kartenfoto.</p>}
+                            {mapUrl && (
+                              <div style={{ position: 'relative', width: '100%', maxWidth: 720, margin: '0 auto' }}>
+                                <img
+                                  src={mapUrl}
+                                  alt="Kartenfoto Route"
+                                  style={{ width: '100%', height: 'auto', display: 'block', borderRadius: 6, border: '1px solid #e2e8f0' }}
+                                />
+                                {hasLine && (
+                                  <svg
+                                    viewBox="0 0 100 100"
+                                    preserveAspectRatio="none"
+                                    style={{
+                                      position: 'absolute',
+                                      left: 0,
+                                      top: 0,
+                                      width: '100%',
+                                      height: '100%',
+                                      pointerEvents: 'none',
+                                    }}
+                                    aria-hidden
+                                  >
+                                    {Array.from({ length: poly.length - 1 }, (_, i) => {
+                                      const a = gpsToPercent(poly[i].lat, poly[i].lon, bbox)
+                                      const b = gpsToPercent(poly[i + 1].lat, poly[i + 1].lon, bbox)
+                                      return (
+                                        <line
+                                          key={`seg-${km.id || ki}-${i}`}
+                                          x1={a.left}
+                                          y1={a.top}
+                                          x2={b.left}
+                                          y2={b.top}
+                                          stroke="rgba(220,38,38,0.65)"
+                                          strokeWidth={1.1}
+                                          strokeLinecap="round"
+                                        />
+                                      )
+                                    })}
+                                  </svg>
+                                )}
+                                {hasMarkers &&
+                                  poly.map((pt, pi) => {
+                                    const url = photoByIndex.get(pi)
+                                    if (!url) return null
+                                    const { left, top } = gpsToPercent(pt.lat, pt.lon, bbox)
+                                    const label = String.fromCharCode(65 + pi)
+                                    return (
+                                      <button
+                                        key={`ppt-${km.id || ki}-${pi}`}
+                                        type="button"
+                                        title={`Punkt ${label}: zugeordnetes Foto anzeigen`}
+                                        onClick={() => openFotos([{ url }], 0)}
+                                        style={{
+                                          position: 'absolute',
+                                          left: `${left}%`,
+                                          top: `${top}%`,
+                                          transform: 'translate(-50%, -50%)',
+                                          width: 30,
+                                          height: 30,
+                                          borderRadius: 999,
+                                          border: '2px solid #fff',
+                                          background: 'rgba(14,165,233,0.95)',
+                                          color: '#fff',
+                                          fontWeight: 700,
+                                          fontSize: 12,
+                                          cursor: 'pointer',
+                                          boxShadow: '0 2px 6px rgba(0,0,0,0.35)',
+                                          lineHeight: '26px',
+                                          textAlign: 'center',
+                                          padding: 0,
+                                          zIndex: 2,
+                                        }}
+                                      >
+                                        {label}
+                                      </button>
+                                    )
+                                  })}
+                              </div>
+                            )}
+                            {ar && photos.length === 0 && (
+                              <p className="muted" style={{ marginTop: '0.5rem', fontSize: '0.85rem' }}>
+                                Noch keine Punkt-Fotos in der App zugeordnet.
+                              </p>
+                            )}
+                            {ar && photos.length > 0 && !hasMarkers && mapUrl && (
+                              <p className="muted" style={{ marginTop: '0.5rem', fontSize: '0.85rem' }}>
+                                Punkt-Fotos sind gespeichert, aber die GPS-Polylinie fehlt oder passt nicht – Klick-Markierung nicht möglich.
+                              </p>
+                            )}
+                            {!ar && mapUrl && (
+                              <p className="muted" style={{ marginTop: '0.5rem', fontSize: '0.85rem' }}>
+                                Ohne Zuordnung zu einer AR-Messung können Punkt-Fotos nicht auf dem Bild platziert werden.
+                              </p>
+                            )}
                           </div>
                         )
                       })}

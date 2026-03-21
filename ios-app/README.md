@@ -71,9 +71,17 @@ ios-app/
 └── README.md
 ```
 
+## Lokale Datensicherung (überlebt neue Builds)
+
+Alle Aufträge werden zusätzlich als JSON im **Documents**-Ordner der App gespeichert (`hausanschluesse_auftraege.json`). Damit gehen Eingaben und Messungen **nicht verloren**, wenn du die App neu baust oder ein Update installierst – solange die App nicht deinstalliert wird.
+
+- Beim Start werden zuerst die **lokal gespeicherten** Daten geladen.
+- Danach versucht die App, die Liste vom Server zu aktualisieren. Schlägt das fehl, bleiben die **lokalen** Daten sichtbar (mit Hinweis).
+- Nach jeder Änderung (**Speichern**, Aktualisieren nach erfolgreichem Server-Laden) und beim Wechsel in den **Hintergrund** wird der Stand erneut geschrieben.
+
 ## Ablauf
 
-1. App startet → lädt Aufträge von `GET /api/auftraege`.
+1. App startet → zeigt ggf. Cache; lädt Aufträge von `GET /api/auftraege`.
 2. Auftrag tippen → Detail mit Stammdaten und Baugruben-Liste.
 3. **„Baugrube messen (AR)“** → AR-View: Startpunkt tippen, Endpunkt tippen, Länge wird angezeigt.
 4. **„Übernehmen“** → Länge wird an den Auftrag angehängt (`baugrubenLaengen`).

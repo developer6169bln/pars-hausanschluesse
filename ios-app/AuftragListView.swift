@@ -2,6 +2,7 @@ import SwiftUI
 
 struct AuftragListView: View {
     @EnvironmentObject var store: AuftraegeStore
+    @Environment(\.scenePhase) private var scenePhase
     @State private var isLoaded = false
 
     var body: some View {
@@ -50,6 +51,11 @@ struct AuftragListView: View {
                 guard !isLoaded else { return }
                 isLoaded = true
                 await store.load()
+            }
+            .onChange(of: scenePhase) { _, newPhase in
+                if newPhase == .background {
+                    store.persistLocalCache()
+                }
             }
             .alert("Fehler", isPresented: .constant(store.error != nil)) {
                 Button("OK") { store.error = nil }
