@@ -95,6 +95,37 @@ Dann können alle die gleiche Auftragspool-URL nutzen, ohne lokal `npm run serve
 
 ---
 
+## Railway funktioniert nicht – Checkliste
+
+1. **Öffentliche Domain / HTTPS**  
+   Unter **Settings → Networking → Generate Domain** (oder **Public Networking**) eine URL erzeugen. Ohne Domain ist der Service oft nur intern erreichbar.
+
+2. **Deploy-Logs**  
+   **Deployments** → fehlgeschlagenen oder letzten Deploy → **View Logs**.  
+   - **Build:** Muss `npm run build` erfolgreich durchlaufen (Ordner `dist/`).  
+   - **Start:** Sollte `Upload-Server: … (bind 0.0.0.0)` erscheinen.
+
+3. **Healthcheck**  
+   Im Browser: `https://deine-app.up.railway.app/api/health`  
+   - `ok: true` und idealerweise `hasDist: true`.  
+   - `hasDist: false` → Build fehlt oder wurde übersprungen → Build Command prüfen.
+
+4. **Umgebungsvariablen (nachdem die Domain feststeht)**  
+   | Variable | Wert |
+   |----------|------|
+   | `API_BASE` | `https://deine-exakte-domain.up.railway.app` (ohne `/` am Ende) |
+   | `VITE_API_URL` | **dieselbe** URL – wird beim **Build** ins Frontend geschrieben |
+
+   Nach Änderung an `VITE_API_URL` **neu deployen** (Redeploy), damit `npm run build` die URL einbettet.
+
+5. **Host-Bindung**  
+   Der Server muss auf **`0.0.0.0`** lauschen (im Repo so umgesetzt). Nur `localhost` reicht in Containern nicht.
+
+6. **Sleeping / Kosten**  
+   Auf dem kostenlosen Plan kann der Service nach Inaktivität „einschlafen“ – erster Aufruf kann länger dauern oder einmal fehlschlagen, kurz warten und neu laden.
+
+---
+
 ## Wenn „Push bei Railway nicht durchgeht“
 
 - **Deploy wird nicht ausgelöst:** Im Railway-Dashboard den Service öffnen → **Settings** → **Source**. Prüfen: Ist das richtige **GitHub-Repo** verbunden und der richtige **Branch** (z. B. `main`) eingestellt? Ohne Verbindung löst ein Push kein Deploy aus.

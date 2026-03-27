@@ -61,6 +61,16 @@ struct BauhinderungReport: Codable, Equatable {
 }
 
 // 3D-Scan-Metadaten für ein Projekt.
+struct ScanKeyframe: Identifiable, Codable, Equatable {
+    var id = UUID()
+    var imagePath: String
+    var timestamp: Date
+    /// Kamerapose im AR-Weltkoordinatensystem (optional für Rückwärtskompatibilität).
+    var positionX: Double?
+    var positionY: Double?
+    var positionZ: Double?
+}
+
 struct ThreeDScan: Identifiable, Codable, Equatable {
     var id = UUID()
     var name: String
@@ -75,6 +85,8 @@ struct ThreeDScan: Identifiable, Codable, Equatable {
     var sceneOriginX: Double?
     var sceneOriginY: Double?
     var sceneOriginZ: Double?
+    /// Für Virtual Walkthrough: ausgewählte Originalframes entlang der Scan-Route.
+    var keyframes: [ScanKeyframe] = []
 }
 
 struct Project: Identifiable, Codable, Equatable {

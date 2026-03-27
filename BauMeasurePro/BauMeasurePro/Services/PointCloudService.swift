@@ -21,11 +21,10 @@ final class PointCloudService {
     /// Jeder N-te Pixel in X/Y wird verarbeitet (1 = volle Auflösung, 2 = jede 2. Zeile/Spalte).
     var depthStep: Int = 1
 
-    /// Maximale Punkte für die Live-Anzeige (darüber wird untertaktet).
-    private let maxDisplayPoints = 80_000
+    /// Harte Obergrenze für gespeicherte Punkte, um RAM-Spitzen bei langen Scans zu vermeiden.
+    var maxStoredPoints: Int = 280_000
 
     private var voxelToPoint: [String: ColoredPoint] = [:]
-    private let queue = DispatchQueue(label: "PointCloudService.sync", attributes: .concurrent)
     private let lock = NSLock()
 
     /// Gibt die aktuelle Punktanzahl zurück.
@@ -131,6 +130,7 @@ final class PointCloudService {
         for (key, pt) in added {
             voxelToPoint[key] = pt
         }
+        trimIfNeededLocked()
         lock.unlock()
     }
 
@@ -166,7 +166,7 @@ final class PointCloudService {
             let r = yuvToR(y: Int(luma), cb: Int(cb), cr: Int(cr))
             let g = yuvToG(y: Int(luma), cb: Int(cb), cr: Int(cr))
             let b = yuvToB(y: Int(luma), cb: Int(cb), cr: Int(cr))
-            return (UInt8(min(255, max(0, r))), UInt8(min(255, max(0, g))), UInt8(min(255, max(0, b))))
+            return boostedColor(r: r, g: g, b: b)
         }
         return (128, 128, 128)
     }
@@ -181,6 +181,36 @@ final class PointCloudService {
         return y + Int(1.772 * Double(cb - 128))
     }
 
+    /// Macht Farben in der Live-Punktwolke sichtbarer (etwas mehr Kontrast + Sättigung).
+    private func boostedColor(r: Int, g: Int, b: Int) -> (UInt8, UInt8, UInt8) {
+        let rf = max(0.0, min(255.0, Double(r))) / 255.0
+        let gf = max(0.0, min(255.0, Double(g))) / 255.0
+        let bf = max(0.0, min(255.0, Double(b))) / 255.0
+        let luma = 0.2126 * rf + 0.7152 * gf + 0.0722 * bf
+        let satBoost = 1.30
+        let contrast = 1.08
+        let rr = ((luma + (rf - luma) * satBoost) - 0.5) * contrast + 0.5
+        let gg = ((luma + (gf - luma) * satBoost) - 0.5) * contrast + 0.5
+        let bb = ((luma + (bf - luma) * satBoost) - 0.5) * contrast + 0.5
+        return (
+            UInt8(max(0, min(255, Int(rr * 255.0)))),
+            UInt8(max(0, min(255, Int(gg * 255.0)))),
+            UInt8(max(0, min(255, Int(bb * 255.0))))
+        )
+    }
+
+    /// Reduziert die Punktmenge in Blöcken, um Speicher stabil zu halten.
+    private func trimIfNeededLocked() {
+        guard voxelToPoint.count > maxStoredPoints else { return }
+        let targetCount = Int(Double(maxStoredPoints) * 0.82)
+        let keys = Array(voxelToPoint.keys)
+        let removeCount = max(0, keys.count - targetCount)
+        guard removeCount > 0 else { return }
+        for key in keys.shuffled().prefix(removeCount) {
+            voxelToPoint.removeValue(forKey: key)
+        }
+    }
+
     /// Kopie aller Punkte für Anzeige oder Export.
     func copyPoints() -> [ColoredPoint] {
         lock.lock()
@@ -189,7 +219,7 @@ final class PointCloudService {
     }
 
     /// Erstellt eine SCNGeometry für die Punktwolke (für Anzeige). Optional: max Punkte begrenzen.
-    func makeSceneKitGeometry(maxPoints: Int? = nil) -> SCNGeometry? {
+    func makeSceneKitGeometry(maxPoints: Int? = nil, pointSize: CGFloat = 1.0) -> SCNGeometry? {
         var points = copyPoints()
         if let max = maxPoints, points.count > max {
             points = Array(points.shuffled().prefix(max))
@@ -236,10 +266,17 @@ final class PointCloudService {
             primitiveCount: points.count,
             bytesPerIndex: MemoryLayout<Int32>.size
         )
+        let s = max(0.5, min(8.0, pointSize))
+        element.pointSize = s
+        element.minimumPointScreenSpaceRadius = s
+        element.maximumPointScreenSpaceRadius = s
 
         let geometry = SCNGeometry(sources: [vertexSource, colorSource], elements: [element])
-        geometry.firstMaterial?.diffuse.contents = UIColor.white
-        geometry.firstMaterial?.isDoubleSided = true
+        let mat = geometry.firstMaterial ?? SCNMaterial()
+        mat.diffuse.contents = UIColor.white
+        mat.lightingModel = .constant
+        mat.isDoubleSided = true
+        geometry.materials = [mat]
         return geometry
     }
 

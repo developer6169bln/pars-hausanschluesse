@@ -8,7 +8,7 @@ iOS-App für Baumessungen mit Foto, GPS, Adresse und AR.
 - **GPS-Koordinaten** und **Adresse + Hausnummer** (LocationService, Reverse Geocoding)
 - **Messpunkte im Foto setzen** (PhotoMeasureView)
 - **Fotos auf der Karte** anzeigen (MapView mit Annotationen)
-- **AR-Distanzmessung** (ARKit / RealityKit)
+- **AR-Distanzmessung** (ARKit): **Einzelstrecke** (A–B) oder **Polylinie** (mehrere Eckpunkte). LiDAR-**Mesh** (falls unterstützt), **Live-Vorschau**, Kalman, **Haptik** bei stabiler Vorschau. **Fadenkreuz**: dünne **gestrichelte** Linien bis zum Bildrand, freier Mittelbereich (gut für lange Strecken). **Messlinien** in AR: **dünn und gestrichelt** (Strichlänge skaliert mit Distanz). **Toggle „Punkte am Fadenkreuz“**: ein = Mitte (Tap bestätigt), aus = Tap-Position.
 - **PDF-Messberichte** (PDFService)
 - **Speicherung** der Messungen (StorageService, UserDefaults + Bilder im Documents-Ordner)
 

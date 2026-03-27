@@ -11,10 +11,11 @@ const JPEG_QUALITY = 0.75
 
 // API-URL:
 // - Lokal: über VITE_API_URL (z.B. http://localhost:3010)
-// - Produktion (Railway, gleiche Domain für Frontend+API): Fallback auf window.location.origin,
-//   damit der Auftragspool auch ohne gesetztes VITE_API_URL funktioniert.
+// - Dev ohne .env: Fallback localhost:3010 (gleich wie .env.example), sonst „kein Server“ obwohl API läuft
+// - Produktion (Railway, gleiche Domain für Frontend+API): Fallback auf window.location.origin
 const API_BASE = (
   import.meta.env.VITE_API_URL ||
+  (import.meta.env.DEV ? 'http://localhost:3010' : '') ||
   ((import.meta.env.PROD && typeof window !== 'undefined' && window.location?.origin) ? window.location.origin : '') ||
   ''
 ).replace(/\/$/, '')

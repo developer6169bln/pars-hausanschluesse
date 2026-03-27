@@ -45,4 +45,4 @@ cd "/Users/yaskomasko/Documents/curser daten/hausanschluesse-app"
 npm run dev
 ```
 
-Im Browser: **http://localhost:5173** öffnen.
+Im Browser: **http://localhost:5180** öffnen (Port steht in `vite.config.js`; abweichend siehe Terminal-Ausgabe von `npm run dev`).

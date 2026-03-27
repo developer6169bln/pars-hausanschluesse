@@ -439,6 +439,7 @@ if (fs.existsSync(DIST)) {
   })
 }
 
-app.listen(PORT, () => {
-  console.log(`Upload-Server: ${API_BASE} (Port ${PORT})`)
+// 0.0.0.0: In Docker/Railway muss der Prozess auf allen Interfaces lauschen – sonst Healthcheck & öffentliche URL greifen nicht.
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Upload-Server: ${API_BASE} (Port ${PORT}, bind 0.0.0.0)`)
 })

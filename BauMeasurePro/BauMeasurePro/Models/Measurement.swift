@@ -26,6 +26,8 @@ struct PolylinePointPhoto: Identifiable, Codable, Equatable {
     /// Lokaler Bildpfad (Dateiname) oder Server-URL nach Sync.
     var imagePath: String
     var date: Date
+    /// Verknüpfung zur Foto-Messung, aus der dieses Punktfoto stammt (für Re-Assign ohne Duplikate).
+    var sourceMeasurementId: UUID? = nil
 }
 
 struct Measurement: Identifiable, Codable, Equatable {

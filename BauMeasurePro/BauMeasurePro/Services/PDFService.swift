@@ -632,7 +632,23 @@ class PDFService {
                   let pointPhotos = m.polylinePointPhotos,
                   !pointPhotos.isEmpty
             else { continue }
-            let photosSorted = pointPhotos.sorted { $0.date < $1.date }
+            let photosSorted: [PolylinePointPhoto]
+            // Wenn neue Zuordnungen mit sourceMeasurementId vorhanden sind,
+            // ignorieren wir Legacy-Einträge ohne diese ID und behalten pro Quelle nur die neueste.
+            if pointPhotos.contains(where: { $0.sourceMeasurementId != nil }) {
+                var bySource: [UUID: PolylinePointPhoto] = [:]
+                for pp in pointPhotos where pp.sourceMeasurementId != nil {
+                    let sid = pp.sourceMeasurementId!
+                    if let existing = bySource[sid] {
+                        if pp.date > existing.date { bySource[sid] = pp }
+                    } else {
+                        bySource[sid] = pp
+                    }
+                }
+                photosSorted = Array(bySource.values).sorted { $0.date < $1.date }
+            } else {
+                photosSorted = pointPhotos.sorted { $0.date < $1.date }
+            }
             for pp in photosSorted {
                 guard pp.pointIndex >= 0, pp.pointIndex < poly.count else { continue }
                 pointPhotoCounter += 1

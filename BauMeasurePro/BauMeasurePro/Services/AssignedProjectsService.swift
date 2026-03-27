@@ -191,7 +191,8 @@ private struct ApiMeasurement: Decodable {
                 id: (x.id.flatMap { UUID(uuidString: $0) }) ?? UUID(),
                 pointIndex: x.pointIndex ?? 0,
                 imagePath: x.imagePath ?? "",
-                date: (x.date.flatMap { ISO8601DateFormatter().date(from: $0) }) ?? Date()
+                date: (x.date.flatMap { ISO8601DateFormatter().date(from: $0) }) ?? Date(),
+                sourceMeasurementId: x.sourceMeasurementId.flatMap { UUID(uuidString: $0) }
             )
         })
         return Measurement(
@@ -240,6 +241,7 @@ private struct ApiPolylinePointPhoto: Decodable {
     let pointIndex: Int?
     let imagePath: String?
     let date: String?
+    let sourceMeasurementId: String?
 }
 
 private struct ApiPhotoPoint: Decodable {

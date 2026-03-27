@@ -230,6 +230,39 @@ class StorageService {
         }
     }
 
+    /// Speichert ein Zwischen-Segment für lange Mesh-Scans auf Disk.
+    /// Rückgabe ist ein relativer Pfad (z. B. "3dscans/segments/<scanId>/segment-3.scn").
+    func saveMeshSegmentScene(_ scene: SCNScene, scanId: UUID, segmentIndex: Int) -> String? {
+        guard let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return nil }
+        let subdir = dir
+            .appendingPathComponent("3dscans", isDirectory: true)
+            .appendingPathComponent("segments", isDirectory: true)
+            .appendingPathComponent(scanId.uuidString, isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(at: subdir, withIntermediateDirectories: true)
+        } catch {
+            return nil
+        }
+        let fileName = "segment-\(segmentIndex).scn"
+        let url = subdir.appendingPathComponent(fileName)
+        do {
+            try scene.write(to: url, options: nil, delegate: nil)
+            return "3dscans/segments/\(scanId.uuidString)/\(fileName)"
+        } catch {
+            return nil
+        }
+    }
+
+    /// Löscht alle temporären Mesh-Segmente eines Scans.
+    func clearMeshSegments(scanId: UUID) {
+        guard let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
+        let subdir = dir
+            .appendingPathComponent("3dscans", isDirectory: true)
+            .appendingPathComponent("segments", isDirectory: true)
+            .appendingPathComponent(scanId.uuidString, isDirectory: true)
+        try? FileManager.default.removeItem(at: subdir)
+    }
+
     /// Liefert den vollen Dateipfad für einen gespeicherten Bildnamen (oder Legacy-Vollpfad).
     /// Beim Laden immer diese Methode verwenden, damit sowohl neue (nur Dateiname) als auch
     /// alte (Vollpfad) Einträge funktionieren.

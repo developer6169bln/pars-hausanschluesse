@@ -45,6 +45,11 @@
 		BM01SK1F60000100000001 /* MeasurementSketchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BM01SK2F60000100000002 /* MeasurementSketchView.swift */; };
 		BM01PC1F60000100000001 /* PointCloudService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BM01PC2F60000100000002 /* PointCloudService.swift */; };
 		BM01SV1F60000100000001 /* Scan3DViewerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BM01SV2F60000100000002 /* Scan3DViewerView.swift */; };
+		BM01LG1F60000100000001 /* GeoFeature.swift in Sources */ = {isa = PBXBuildFile; fileRef = BM01LF1F60000100000001 /* GeoFeature.swift */; };
+		BM01LG2F60000100000001 /* GeoJSONLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = BM01LF2F60000100000001 /* GeoJSONLoader.swift */; };
+		BM01LG3F60000100000001 /* GeoARManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = BM01LF3F60000100000001 /* GeoARManager.swift */; };
+		BM01LG4F60000100000001 /* ARLeitungenGeoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BM01LF4F60000100000001 /* ARLeitungenGeoView.swift */; };
+		BM01LG5F60000100000001 /* leitungen.geojson in Resources */ = {isa = PBXBuildFile; fileRef = BM01LF5F60000100000001 /* leitungen.geojson */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -88,6 +93,11 @@
 		BM01SK2F60000100000002 /* MeasurementSketchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeasurementSketchView.swift; sourceTree = "<group>"; };
 		BM01PC2F60000100000002 /* PointCloudService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PointCloudService.swift; sourceTree = "<group>"; };
 		BM01SV2F60000100000002 /* Scan3DViewerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Scan3DViewerView.swift; sourceTree = "<group>"; };
+		BM01LF1F60000100000001 /* GeoFeature.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeoFeature.swift; sourceTree = "<group>"; };
+		BM01LF2F60000100000001 /* GeoJSONLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeoJSONLoader.swift; sourceTree = "<group>"; };
+		BM01LF3F60000100000001 /* GeoARManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeoARManager.swift; sourceTree = "<group>"; };
+		BM01LF4F60000100000001 /* ARLeitungenGeoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ARLeitungenGeoView.swift; sourceTree = "<group>"; };
+		BM01LF5F60000100000001 /* leitungen.geojson */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = leitungen.geojson; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -117,6 +127,7 @@
 				BM01E62F60000100000006 /* ViewModels */,
 				BM01E72F60000100000007 /* Services */,
 				BM01E82F60000100000008 /* Views */,
+				BM01AR2F60000100000001 /* AR */,
 				BM01M52F60000100000005 /* Extensions */,
 				BM01E92F60000100000009 /* Resources */,
 			);
@@ -156,6 +167,7 @@
 				BM01B42F60000100000004 /* PhotoPoint.swift */,
 				BM01B52F60000100000005 /* Project.swift */,
 				BM01OQ2F60000100000018 /* ProjectOptions.swift */,
+				BM01LF1F60000100000001 /* GeoFeature.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -183,8 +195,17 @@
 				BM01SY2F60000100000001 /* ProjectSyncService.swift */,
 				BM01BC2F6000010000000C /* PDFService.swift */,
 				BM01BP2F60000100000016 /* PhotoLibraryService.swift */,
+				BM01LF2F60000100000001 /* GeoJSONLoader.swift */,
 			);
 			path = Services;
+			sourceTree = "<group>";
+		};
+		BM01AR2F60000100000001 /* AR */ = {
+			isa = PBXGroup;
+			children = (
+				BM01LF3F60000100000001 /* GeoARManager.swift */,
+			);
+			path = AR;
 			sourceTree = "<group>";
 		};
 		BM01E82F60000100000008 /* Views */ = {
@@ -212,6 +233,7 @@
 			children = (
 				BM01C22F60000100000012 /* Info.plist */,
 				BM01C42F60000100000014 /* Assets.xcassets */,
+				BM01LF5F60000100000001 /* leitungen.geojson */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -241,6 +263,7 @@
 				BM01BF2F6000010000000F /* ARMeasureView.swift */,
 				BM01M22F60000100000002 /* ARMeshScanView.swift */,
 				BM01C02F60000100000010 /* PhotoMeasureView.swift */,
+				BM01LF4F60000100000001 /* ARLeitungenGeoView.swift */,
 			);
 			path = Measurement;
 			sourceTree = "<group>";
@@ -319,6 +342,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				BM01R12F60000100000001 /* Assets.xcassets in Resources */,
+				BM01LG5F60000100000001 /* leitungen.geojson in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -366,6 +390,10 @@
 				BM01EX1F60000100000001 /* ExportService.swift in Sources */,
 				BM01SK1F60000100000001 /* MeasurementSketchView.swift in Sources */,
 				BM01SV1F60000100000001 /* Scan3DViewerView.swift in Sources */,
+				BM01LG1F60000100000001 /* GeoFeature.swift in Sources */,
+				BM01LG2F60000100000001 /* GeoJSONLoader.swift in Sources */,
+				BM01LG3F60000100000001 /* GeoARManager.swift in Sources */,
+				BM01LG4F60000100000001 /* ARLeitungenGeoView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -8,6 +8,7 @@ import ImageIO
 enum ProjectDetailTab: String, CaseIterable {
     case fotos = "Fotos"
     case ar = "AR-Messung"
+    case threeD = "3D"
 }
 
 struct ProjectDetailView: View {
@@ -48,8 +49,11 @@ struct ProjectDetailView: View {
 
                     if selectedTab == .fotos {
                         fotosList(project: p)
-                    } else {
+                    } else if selectedTab == .ar {
                         ARMeasureView(projectId: projectId)
+                            .environmentObject(viewModel)
+                    } else {
+                        Baugrube3DScanModuleView(projectId: projectId)
                             .environmentObject(viewModel)
                     }
                 }
@@ -862,8 +866,6 @@ private struct AssignPhotoToMeasurementPointView: View {
     @State private var selectedPointIndex: Int?
     @State private var selectedPhotoMeasurementId: UUID?
 
-    @State private var cameraPosition: MapCameraPosition = .automatic
-    @State private var currentRegion: MKCoordinateRegion?
     @State private var showAssignError = false
     @State private var assignErrorMessage: String = ""
 
@@ -873,7 +875,7 @@ private struct AssignPhotoToMeasurementPointView: View {
 
     private var arMeasurements: [Measurement] {
         effectiveProject.measurements.filter { m in
-            m.isARMeasurement && ((m.polylinePoints?.count ?? 0) >= 2)
+            m.isARMeasurement && (pointCount(for: m) >= 2)
         }
     }
 
@@ -923,65 +925,48 @@ private struct AssignPhotoToMeasurementPointView: View {
                         Text("2) Messpunkt auf Karte auswählen")
                             .font(.headline)
 
-                        if let m = selectedARMeasurement, let poly = m.polylinePoints, poly.count >= 2 {
-                            ZStack(alignment: .topTrailing) {
-                                Map(position: $cameraPosition) {
-                                    ForEach(Array(poly.enumerated()), id: \.element.id) { i, p in
-                                        let coord = CLLocationCoordinate2D(latitude: p.latitude, longitude: p.longitude)
-                                        Annotation(pointLabel(i), coordinate: coord) {
-                                            Circle()
-                                                .fill(selectedPointIndex == i ? Color.green : Color.red)
-                                                .frame(width: selectedPointIndex == i ? 16 : 12, height: selectedPointIndex == i ? 16 : 12)
-                                                .overlay(Circle().stroke(Color.white, lineWidth: 2))
-                                                .onTapGesture {
-                                                    selectedPointIndex = i
+                        if let m = selectedARMeasurement {
+                            let names = pointNames(for: m)
+                            if names.count >= 2 {
+                                Text("Punkte")
+                                    .font(.subheadline.bold())
+                                ScrollView {
+                                    LazyVStack(spacing: 8) {
+                                        ForEach(Array(names.enumerated()), id: \.offset) { i, name in
+                                            Button {
+                                                selectedPointIndex = i
+                                            } label: {
+                                                HStack {
+                                                    Text(name)
+                                                        .font(.headline)
+                                                    Spacer()
+                                                    if selectedPointIndex == i {
+                                                        Image(systemName: "checkmark.circle.fill")
+                                                            .foregroundStyle(.green)
+                                                    }
                                                 }
+                                                .padding(.vertical, 10)
+                                                .padding(.horizontal, 12)
+                                                .background(selectedPointIndex == i ? Color.green.opacity(0.18) : Color.gray.opacity(0.08))
+                                                .clipShape(RoundedRectangle(cornerRadius: 10))
+                                            }
+                                            .buttonStyle(.plain)
                                         }
                                     }
                                 }
-                                .mapStyle(.standard)
-                                .frame(height: 260)
-                                .clipShape(RoundedRectangle(cornerRadius: 12))
-                                .onAppear {
-                                    if cameraPosition == .automatic {
-                                        let r = regionForPolyline(poly)
-                                        currentRegion = r
-                                        cameraPosition = .region(r)
-                                    }
-                                }
-                                .onChange(of: selectedMeasurementId) { _, _ in
-                                    selectedPointIndex = nil
-                                    if let poly = selectedARMeasurement?.polylinePoints, poly.count >= 2 {
-                                        let r = regionForPolyline(poly)
-                                        currentRegion = r
-                                        cameraPosition = .region(r)
-                                    }
-                                }
+                                .frame(maxHeight: 220)
 
-                                VStack(spacing: 10) {
-                                    Button {
-                                        zoom(delta: 0.6)
-                                    } label: {
-                                        Image(systemName: "plus.magnifyingglass")
-                                    }
-                                    .buttonStyle(.borderedProminent)
-                                    Button {
-                                        zoom(delta: 1.6)
-                                    } label: {
-                                        Image(systemName: "minus.magnifyingglass")
-                                    }
-                                    .buttonStyle(.borderedProminent)
+                                if let idx = selectedPointIndex {
+                                    Text("Ausgewählt: \(pointLabel(idx))")
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                } else {
+                                    Text("Punkt antippen für Zuordnung.")
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
                                 }
-                                .padding(8)
-                            }
-
-                            if let idx = selectedPointIndex {
-                                Text("Ausgewählt: Punkt \(pointLabel(idx))")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
                             } else {
-                                Text("Tippe einen Punkt an (A, B, C …).")
-                                    .font(.subheadline)
+                                Text("Diese Messung hat keine nutzbaren Messpunkte.")
                                     .foregroundStyle(.secondary)
                             }
                         } else {
@@ -1042,8 +1027,6 @@ private struct AssignPhotoToMeasurementPointView: View {
                     selectedMeasurementId = nil
                     selectedPhotoMeasurementId = nil
                     selectedPointIndex = nil
-                    cameraPosition = .automatic
-                    currentRegion = nil
                 }
             }
             .toolbar {
@@ -1072,29 +1055,18 @@ private struct AssignPhotoToMeasurementPointView: View {
         return "\(index + 1)"
     }
 
-    private func regionForPolyline(_ poly: [PolylinePoint]) -> MKCoordinateRegion {
-        let coords = poly.map { CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude) }
-        let lats = coords.map(\.latitude)
-        let lons = coords.map(\.longitude)
-        let minLat = lats.min() ?? coords[0].latitude
-        let maxLat = lats.max() ?? coords[0].latitude
-        let minLon = lons.min() ?? coords[0].longitude
-        let maxLon = lons.max() ?? coords[0].longitude
-        let center = CLLocationCoordinate2D(latitude: (minLat + maxLat) / 2, longitude: (minLon + maxLon) / 2)
-        let span = MKCoordinateSpan(latitudeDelta: max(0.0006, (maxLat - minLat) * 1.8),
-                                    longitudeDelta: max(0.0006, (maxLon - minLon) * 1.8))
-        return MKCoordinateRegion(center: center, span: span)
+    private func pointCount(for measurement: Measurement) -> Int {
+        if let poly = measurement.polylinePoints, poly.count >= 2 { return poly.count }
+        let gpsCount = measurement.orderedGPSPoints.count
+        if gpsCount >= 2 { return gpsCount }
+        if let seg = measurement.polylineSegmentMeters, !seg.isEmpty { return seg.count + 1 }
+        return 0
     }
 
-    private func zoom(delta: Double) {
-        guard let region = currentRegion else { return }
-        let newSpan = MKCoordinateSpan(
-            latitudeDelta: max(0.00015, region.span.latitudeDelta * delta),
-            longitudeDelta: max(0.00015, region.span.longitudeDelta * delta)
-        )
-        let r = MKCoordinateRegion(center: region.center, span: newSpan)
-        currentRegion = r
-        cameraPosition = .region(r)
+    private func pointNames(for measurement: Measurement) -> [String] {
+        let n = pointCount(for: measurement)
+        guard n >= 2 else { return [] }
+        return (0..<n).map { pointLabel($0) }
     }
 
     @ViewBuilder
@@ -1145,89 +1117,70 @@ private struct AssignPhotoToMeasurementPointView: View {
             showAssignError = true
             return
         }
-        guard let poly = ar.polylinePoints, poly.count >= 2 else {
-            assignErrorMessage = "AR‑Messung hat keine gültigen Polylinienpunkte."
+        let count = pointCount(for: ar)
+        guard count >= 2 else {
+            assignErrorMessage = "AR‑Messung hat keine gültigen Messpunkte."
+            showAssignError = true
+            return
+        }
+        guard pointIndex < count else {
+            assignErrorMessage = "Ungültiger Messpunkt."
             showAssignError = true
             return
         }
 
         let photoFull = storage.fullPath(forStoredPath: photo.imagePath)
-        guard FileManager.default.fileExists(atPath: photoFull),
-              let img = loadThumbnail(at: photoFull, maxPixel: 2400)
-        else {
+        guard FileManager.default.fileExists(atPath: photoFull) else {
             assignErrorMessage = "Foto konnte nicht geladen werden (Datei fehlt)."
             showAssignError = true
             return
         }
 
-        let meters = cumulativeMeters(measurement: ar, poly: poly, pointIndex: pointIndex)
-        let label = "\(pointLabel(pointIndex)) · \(String(format: "%.2f", meters).replacingOccurrences(of: ".", with: ",")) m"
-        let rendered = drawCornerLabel(on: img, text: label) ?? img
-        guard let newPath = storage.saveImage(rendered, projectName: proj.name, overlay: nil, exportToAlbum: true) else {
-            assignErrorMessage = "Foto konnte nicht gespeichert werden."
-            showAssignError = true
-            return
-        }
+        // Re-Assign global: alte Zuordnung dieses Fotos in allen AR-Messungen entfernen.
+        removeOldAssignmentsForPhoto(photo, in: proj)
 
         var updated = ar
         var list = updated.polylinePointPhotos ?? []
-        list.append(PolylinePointPhoto(pointIndex: pointIndex, imagePath: newPath, date: Date()))
+        // Zusätzlich lokal absichern.
+        list.removeAll { pp in
+            pp.sourceMeasurementId == photo.id || pp.imagePath == photo.imagePath
+        }
+        list.append(
+            PolylinePointPhoto(
+                pointIndex: pointIndex,
+                imagePath: photo.imagePath,
+                date: Date(),
+                sourceMeasurementId: photo.id
+            )
+        )
         updated.polylinePointPhotos = list
 
         viewModel.updateMeasurement(projectId: proj.id, updated)
 
         // Foto-Messung in der Liste nach Messpunkt benennen (Anzeige: „Foto n · …“).
         var renamedPhoto = photo
-        renamedPhoto.address = "Messpunkt \(pointLabel(pointIndex)) · \(String(format: "%.2f", meters).replacingOccurrences(of: ".", with: ",")) m"
+        renamedPhoto.address = "Messpunkt \(pointLabel(pointIndex))"
         viewModel.updateMeasurement(projectId: proj.id, renamedPhoto)
 
         dismiss()
     }
 
-    private func cumulativeMeters(measurement: Measurement, poly: [PolylinePoint], pointIndex: Int) -> Double {
-        if pointIndex <= 0 { return 0 }
-        if let seg = measurement.polylineSegmentMeters, !seg.isEmpty {
-            let n = min(pointIndex, seg.count)
-            return seg.prefix(n).reduce(0, +)
+    private func removeOldAssignmentsForPhoto(_ photo: Measurement, in project: Project) {
+        guard let fresh = viewModel.project(byId: project.id) else { return }
+        for m in fresh.measurements where m.isARMeasurement {
+            guard var list = m.polylinePointPhotos, !list.isEmpty else { continue }
+            let before = list.count
+            list.removeAll { pp in
+                pp.sourceMeasurementId == photo.id || pp.imagePath == photo.imagePath
+            }
+            guard list.count != before else { continue }
+            var updated = m
+            updated.polylinePointPhotos = list.isEmpty ? nil : list
+            viewModel.updateMeasurement(projectId: project.id, updated)
         }
-        // Fallback: GPS-Distanzen
-        var sum: Double = 0
-        let n = min(pointIndex, poly.count - 1)
-        if n <= 0 { return 0 }
-        for i in 0 ..< n {
-            let a = CLLocation(latitude: poly[i].latitude, longitude: poly[i].longitude)
-            let b = CLLocation(latitude: poly[i + 1].latitude, longitude: poly[i + 1].longitude)
-            sum += a.distance(from: b)
-        }
-        return sum
     }
 
-    private func drawCornerLabel(on image: UIImage, text: String) -> UIImage? {
-        let scale: CGFloat = 1
-        let renderer = UIGraphicsImageRenderer(size: image.size, format: {
-            let f = UIGraphicsImageRendererFormat()
-            f.scale = scale
-            return f
-        }())
-        return renderer.image { ctx in
-            image.draw(at: .zero)
-            let padding: CGFloat = max(12, min(image.size.width, image.size.height) * 0.025)
-            let fontSize: CGFloat = max(18, min(image.size.width, image.size.height) * 0.05)
-            let font = UIFont.boldSystemFont(ofSize: fontSize)
-            let attrs: [NSAttributedString.Key: Any] = [
-                .font: font,
-                .foregroundColor: UIColor.white,
-                .strokeColor: UIColor.black,
-                .strokeWidth: -max(2, fontSize * 0.12),
-            ]
-            let str = text as NSString
-            let size = str.size(withAttributes: attrs)
-            let box = CGRect(x: padding, y: padding, width: size.width + padding * 1.2, height: size.height + padding * 0.8)
-            UIColor.black.withAlphaComponent(0.55).setFill()
-            UIBezierPath(roundedRect: box, cornerRadius: 12).fill()
-            str.draw(at: CGPoint(x: box.minX + padding * 0.6, y: box.minY + padding * 0.35), withAttributes: attrs)
-        }
-    }
+    // Label-Overlay ist nicht mehr nötig; Punktname kommt aus der Zuordnung im Bericht.
 }
 
 // MARK: - Kleine Projektkarte mit gespeicherter Route
@@ -1640,6 +1593,111 @@ struct ShareablePDFItem: Identifiable {
 struct ShareableExportItem: Identifiable {
     let id = UUID()
     let url: URL
+}
+
+// MARK: - Neues Modul: Baugruben 3D Scan (polycam-ähnlicher Workflow)
+
+private struct Baugrube3DScanModuleView: View {
+    @EnvironmentObject var viewModel: MapViewModel
+    @Environment(\.dismiss) private var dismiss
+    let projectId: UUID
+
+    @State private var showScanner = false
+    @State private var pendingScanId = UUID()
+
+    private var project: Project? {
+        viewModel.project(byId: projectId)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if let p = project {
+                    List {
+                        Section("Baugruben 3D Scans") {
+                            if p.threeDScans.isEmpty {
+                                Text("Noch keine 3D-Scans gespeichert.")
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                ForEach(p.threeDScans.sorted(by: { $0.createdAt > $1.createdAt })) { scan in
+                                    NavigationLink {
+                                        Scan3DViewerView(scan: scan)
+                                    } label: {
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text(scan.name)
+                                                .font(.headline)
+                                            Text(scan.createdAt.formatted(date: .abbreviated, time: .shortened))
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                        }
+                                    }
+                                }
+                                .onDelete { offsets in
+                                    let sorted = p.threeDScans.sorted(by: { $0.createdAt > $1.createdAt })
+                                    for idx in offsets {
+                                        guard sorted.indices.contains(idx) else { continue }
+                                        viewModel.deleteThreeDScan(projectId: p.id, scanId: sorted[idx].id)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    ContentUnavailableView("Projekt nicht gefunden", systemImage: "folder.badge.questionmark")
+                }
+            }
+            .navigationTitle("Baugruben 3D")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Schließen") { dismiss() }
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        pendingScanId = UUID()
+                        showScanner = true
+                    } label: {
+                        Label("Neuer Scan", systemImage: "plus.circle.fill")
+                    }
+                }
+            }
+        }
+        .fullScreenCover(isPresented: $showScanner) {
+            ARMeshScanView(
+                scanId: pendingScanId,
+                onSave: { path, lat, lon, ox, oy, oz, keyframes in
+                    guard var p = viewModel.project(byId: projectId) else {
+                        showScanner = false
+                        return
+                    }
+                    if p.threeDScans.contains(where: { $0.id == pendingScanId }) {
+                        showScanner = false
+                        return
+                    }
+                    let n = p.threeDScans.count + 1
+                    let scan = ThreeDScan(
+                        id: pendingScanId,
+                        name: "Baugrube \(n)",
+                        createdAt: Date(),
+                        filePath: path,
+                        note: nil,
+                        latitude: lat,
+                        longitude: lon,
+                        sceneOriginX: ox,
+                        sceneOriginY: oy,
+                        sceneOriginZ: oz,
+                        keyframes: keyframes
+                    )
+                    p.threeDScans.append(scan)
+                    viewModel.updateProject(p)
+                    showScanner = false
+                },
+                onCancel: {
+                    showScanner = false
+                }
+            )
+        }
+    }
 }
 
 /// Zeigt das 3D-Scan-Modell an seiner GPS-Position auf einer 2D-Luftbild-Karte als Boden-Layer.

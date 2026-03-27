@@ -1,6 +1,7 @@
 import SwiftUI
 import SceneKit
 import UIKit
+import CoreGraphics
 
 /// 3D-Viewer für gespeicherte Scans. Unterstützte Formate:
 /// - **.ply** = Punktwolke (RGB) aus dem LiDAR-Punktwolken-Scan (ScanAce-ähnlich)
@@ -24,20 +25,6 @@ enum PointCloudDisplayStyle: String, CaseIterable {
 /// Szenen-Hintergrundfarbe, damit man sieht, dass der Viewer aktiv ist.
 private func setSceneBackground(_ scene: SCNScene) {
     scene.background.contents = UIColor(red: 0.15, green: 0.15, blue: 0.2, alpha: 1)
-}
-
-/// Workaround gegen spiegelverkehrte Darstellung: spiegelt die komplette Szene an der X‑Achse zurück.
-/// Dadurch werden Mesh-Scans, die aktuell links/rechts vertauscht wirken, korrigiert.
-private func applyMirrorFix(to scene: SCNScene) {
-    let container = SCNNode()
-    container.name = "modelRoot"
-    container.scale = SCNVector3(-1, 1, 1)
-    let children = scene.rootNode.childNodes
-    for child in children {
-        child.removeFromParentNode()
-        container.addChildNode(child)
-    }
-    scene.rootNode.addChildNode(container)
 }
 
 /// Verschiebt das gescannte Objekt so, dass sein Schwerpunkt im Ursprung liegt.
@@ -307,13 +294,34 @@ struct SceneKitContainerView: UIViewRepresentable {
 }
 
 struct Scan3DViewerView: View {
+    private enum ViewerTab: String, CaseIterable {
+        case model = "Modell"
+        case walkthrough = "Walkthrough"
+    }
+
+    private enum PlaybackMode: String, CaseIterable {
+        case once = "Einmal"
+        case loop = "Loop"
+        case pingPong = "Ping-Pong"
+    }
+
     let scan: ThreeDScan
     private let storage = StorageService()
     @State private var scene: SCNScene = makePlaceholderScene()
     @AppStorage("pointCloudDisplayStyle") private var displayStyle: String = PointCloudDisplayStyle.standard.rawValue
+    @AppStorage("pointCloudPointSize") private var pointCloudPointSize: Double = 1.0
     @State private var volumeM3: Double?
     @State private var showVolumeError = false
     @State private var volumeErrorMessage: String?
+    @State private var selectedTab: ViewerTab = .model
+    @State private var currentKeyframeIndex = 0
+    @State private var showKeyframeImage = true
+    @State private var autoPlayEnabled = false
+    @State private var playbackInterval: Double = 0.7
+    @State private var playbackProgress: Double = 0
+    @State private var playbackMode: PlaybackMode = .once
+    @State private var pingPongDirection: Double = 1.0
+    @State private var walkthroughFullscreen = false
 
     private var currentStyle: PointCloudDisplayStyle {
         PointCloudDisplayStyle(rawValue: displayStyle) ?? .standard
@@ -323,29 +331,121 @@ struct Scan3DViewerView: View {
         scan.filePath.lowercased().hasSuffix(".ply")
     }
 
+    private var hasWalkthrough: Bool {
+        !scan.keyframes.isEmpty
+    }
+
+    private var currentKeyframe: ScanKeyframe? {
+        guard hasWalkthrough else { return nil }
+        let idx = min(max(0, displayedKeyframeIndex), scan.keyframes.count - 1)
+        return scan.keyframes[idx]
+    }
+
+    private var displayedKeyframeIndex: Int {
+        guard hasWalkthrough else { return 0 }
+        let maxIdx = scan.keyframes.count - 1
+        return min(max(0, Int(round(playbackProgress))), maxIdx)
+    }
+
+    private var interpolatedTrajectoryPoint: CGPoint? {
+        guard !trajectoryPoints.isEmpty else { return nil }
+        if trajectoryPoints.count == 1 { return trajectoryPoints[0] }
+        let maxIdx = trajectoryPoints.count - 1
+        let clamped = min(max(0, playbackProgress), Double(maxIdx))
+        let fromIdx = Int(floor(clamped))
+        let toIdx = min(fromIdx + 1, maxIdx)
+        let t = clamped - Double(fromIdx)
+        let a = trajectoryPoints[fromIdx]
+        let b = trajectoryPoints[toIdx]
+        return CGPoint(
+            x: a.x + (b.x - a.x) * t,
+            y: a.y + (b.y - a.y) * t
+        )
+    }
+
+    private var blendSegment: (from: Int, to: Int, alpha: Double)? {
+        guard scan.keyframes.count > 1 else { return nil }
+        let maxIdx = scan.keyframes.count - 1
+        let clamped = min(max(0, playbackProgress), Double(maxIdx))
+        let from = Int(floor(clamped))
+        let to = min(from + 1, maxIdx)
+        let alpha = clamped - Double(from)
+        return (from: from, to: to, alpha: alpha)
+    }
+
+    private var trajectoryPoints: [CGPoint] {
+        let points = scan.keyframes.compactMap { keyframe -> CGPoint? in
+            guard let x = keyframe.positionX, let z = keyframe.positionZ else { return nil }
+            return CGPoint(x: x, y: z)
+        }
+        guard !points.isEmpty else { return [] }
+        let minX = points.map(\.x).min() ?? 0
+        let maxX = points.map(\.x).max() ?? 1
+        let minY = points.map(\.y).min() ?? 0
+        let maxY = points.map(\.y).max() ?? 1
+        let width = max(maxX - minX, 0.001)
+        let height = max(maxY - minY, 0.001)
+        return points.map { p in
+            CGPoint(x: (p.x - minX) / width, y: (p.y - minY) / height)
+        }
+    }
+
     var body: some View {
-        Color(red: 0.15, green: 0.15, blue: 0.2)
-            .overlay {
+        ZStack {
+            Color(red: 0.15, green: 0.15, blue: 0.2)
+                .ignoresSafeArea()
+
+            if selectedTab == .model {
                 SceneKitContainerView(scene: scene)
+            } else {
+                walkthroughView
             }
-            .overlay(alignment: .bottom) {
-                if let v = volumeM3 {
-                    Text(String(format: "Volumen: %.2f m³", v))
-                        .font(.caption)
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(.black.opacity(0.7))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                        .padding(.bottom, 16)
+        }
+        .overlay(alignment: .top) {
+            if !(selectedTab == .walkthrough && walkthroughFullscreen) {
+                Picker("Ansicht", selection: $selectedTab) {
+                    ForEach(ViewerTab.allCases, id: \.self) { tab in
+                        Text(tab.rawValue).tag(tab)
+                    }
                 }
+                .pickerStyle(.segmented)
+                .padding(.horizontal, 14)
+                .padding(.top, 10)
             }
-            .ignoresSafeArea()
-            .frame(minWidth: 200, minHeight: 200)
+        }
+        .overlay(alignment: .bottom) {
+            if selectedTab == .model, let v = volumeM3 {
+                Text(String(format: "Volumen: %.2f m³", v))
+                    .font(.caption)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(.black.opacity(0.7))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .padding(.bottom, 16)
+            } else if selectedTab == .model, isPointCloudScan {
+                HStack(spacing: 10) {
+                    Text("Punktgröße")
+                        .font(.caption2)
+                        .foregroundStyle(.white.opacity(0.9))
+                    Slider(value: $pointCloudPointSize, in: 0.5...4.0, step: 0.1)
+                    Text(String(format: "%.1f", pointCloudPointSize))
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(.white.opacity(0.9))
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(.black.opacity(0.65))
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .padding(.horizontal, 12)
+                .padding(.bottom, 12)
+            }
+        }
+        .frame(minWidth: 200, minHeight: 200)
         .navigationTitle(scan.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            if isPointCloudScan {
+            if selectedTab == .model, isPointCloudScan {
                 ToolbarItem(placement: .primaryAction) {
                     Picker("Darstellung", selection: $displayStyle) {
                         ForEach(PointCloudDisplayStyle.allCases, id: \.rawValue) { style in
@@ -354,7 +454,7 @@ struct Scan3DViewerView: View {
                     }
                     .pickerStyle(.menu)
                 }
-            } else {
+            } else if selectedTab == .model {
                 ToolbarItem(placement: .primaryAction) {
                     Button("Volumen") {
                         do {
@@ -368,15 +468,239 @@ struct Scan3DViewerView: View {
                 }
             }
         }
-        .task(id: "\(scan.id)-\(displayStyle)") {
+        .task(id: "\(scan.id)-\(displayStyle)-\(String(format: "%.1f", pointCloudPointSize))") {
             await Task.yield()
             await loadAndApplyScene()
+        }
+        .onAppear {
+            currentKeyframeIndex = 0
+            playbackProgress = 0
+        }
+        .onDisappear {
+            autoPlayEnabled = false
+            walkthroughFullscreen = false
+        }
+        .task(id: autoPlayTaskKey) {
+            guard autoPlayEnabled, scan.keyframes.count > 1 else { return }
+            let fps: Double = 30
+            let stepSeconds = 1.0 / fps
+            let segmentDuration = max(0.15, playbackInterval)
+            let stepPerTick = stepSeconds / segmentDuration
+            while autoPlayEnabled {
+                try? await Task.sleep(nanoseconds: UInt64(stepSeconds * 1_000_000_000))
+                guard autoPlayEnabled else { break }
+                await MainActor.run {
+                    let endProgress = Double(max(0, scan.keyframes.count - 1))
+                    switch playbackMode {
+                    case .once:
+                        if playbackProgress >= endProgress {
+                            autoPlayEnabled = false
+                        } else {
+                            playbackProgress = min(endProgress, playbackProgress + stepPerTick)
+                        }
+                    case .loop:
+                        if endProgress > 0 {
+                            let next = playbackProgress + stepPerTick
+                            playbackProgress = next > endProgress ? 0 : next
+                        }
+                    case .pingPong:
+                        if endProgress <= 0 {
+                            autoPlayEnabled = false
+                        } else {
+                            let next = playbackProgress + (stepPerTick * pingPongDirection)
+                            if next >= endProgress {
+                                playbackProgress = endProgress
+                                pingPongDirection = -1
+                            } else if next <= 0 {
+                                playbackProgress = 0
+                                pingPongDirection = 1
+                            } else {
+                                playbackProgress = next
+                            }
+                        }
+                    }
+                    currentKeyframeIndex = displayedKeyframeIndex
+                }
+            }
         }
         .alert("Volumenberechnung", isPresented: $showVolumeError) {
             Button("OK", role: .cancel) { showVolumeError = false }
         } message: {
             Text(volumeErrorMessage ?? "Volumen konnte nicht berechnet werden.")
         }
+    }
+
+    private var autoPlayTaskKey: String {
+        "\(scan.id.uuidString)-\(autoPlayEnabled)-\(String(format: "%.2f", playbackInterval))"
+    }
+
+    private func keyframeImage(at index: Int) -> UIImage? {
+        guard scan.keyframes.indices.contains(index) else { return nil }
+        let path = storage.fullPath(forStoredPath: scan.keyframes[index].imagePath)
+        return UIImage(contentsOfFile: path)
+    }
+
+    private var walkthroughView: some View {
+        VStack(spacing: 12) {
+            Spacer(minLength: walkthroughFullscreen ? 8 : 40)
+            if let keyframe = currentKeyframe {
+                if showKeyframeImage {
+                    if let blend = blendSegment,
+                       let fromImage = keyframeImage(at: blend.from) {
+                        ZStack {
+                            Image(uiImage: fromImage)
+                                .resizable()
+                                .scaledToFit()
+                                .opacity(1.0 - blend.alpha)
+                            if let toImage = keyframeImage(at: blend.to) {
+                                Image(uiImage: toImage)
+                                    .resizable()
+                                    .scaledToFit()
+                                    .opacity(blend.alpha)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: walkthroughFullscreen ? .infinity : 420)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .padding(.horizontal, 16)
+                    } else {
+                        let fullPath = storage.fullPath(forStoredPath: keyframe.imagePath)
+                        if let image = UIImage(contentsOfFile: fullPath) {
+                            Image(uiImage: image)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(maxWidth: .infinity, maxHeight: walkthroughFullscreen ? .infinity : 420)
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .padding(.horizontal, 16)
+                        } else {
+                            Text("Keyframe-Bild nicht gefunden")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                Text("Frame \(displayedKeyframeIndex + 1) / \(scan.keyframes.count)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(keyframe.timestamp.formatted(date: .abbreviated, time: .standard))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                if !trajectoryPoints.isEmpty && !walkthroughFullscreen {
+                    trajectoryView
+                }
+            } else {
+                Text("Keine Walkthrough-Keyframes verfügbar. Bitte neuen 3D-Scan starten, dann wird Walkthrough automatisch aufgezeichnet.")
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 20)
+            }
+            Spacer(minLength: walkthroughFullscreen ? 8 : 0)
+            if walkthroughFullscreen {
+                HStack {
+                    Spacer()
+                    Button("Vollbild beenden") {
+                        walkthroughFullscreen = false
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.black.opacity(0.7))
+                    .padding(.trailing, 16)
+                }
+            }
+            if !walkthroughFullscreen {
+            HStack(spacing: 10) {
+                Button("Zurück") {
+                    currentKeyframeIndex = max(0, currentKeyframeIndex - 1)
+                    playbackProgress = Double(currentKeyframeIndex)
+                    autoPlayEnabled = false
+                }
+                .buttonStyle(.bordered)
+                .disabled(currentKeyframeIndex <= 0)
+
+                Button(showKeyframeImage ? "Bild aus" : "Bild an") {
+                    showKeyframeImage.toggle()
+                }
+                .buttonStyle(.bordered)
+
+                Button("Vollbild") {
+                    walkthroughFullscreen = true
+                }
+                .buttonStyle(.bordered)
+
+                Button(autoPlayEnabled ? "Stop" : "Auto") {
+                    if autoPlayEnabled {
+                        autoPlayEnabled = false
+                    } else {
+                        if currentKeyframeIndex >= max(0, scan.keyframes.count - 1) {
+                            currentKeyframeIndex = 0
+                            playbackProgress = 0
+                        }
+                        pingPongDirection = 1
+                        autoPlayEnabled = true
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(autoPlayEnabled ? .red : .blue)
+                .disabled(scan.keyframes.count < 2)
+
+                Button("Weiter") {
+                    currentKeyframeIndex = min(max(0, scan.keyframes.count - 1), currentKeyframeIndex + 1)
+                    playbackProgress = Double(currentKeyframeIndex)
+                    autoPlayEnabled = false
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(currentKeyframeIndex >= max(0, scan.keyframes.count - 1))
+            }
+            if hasWalkthrough {
+                HStack(spacing: 10) {
+                    Text("Tempo")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Slider(value: $playbackInterval, in: 0.2...1.8, step: 0.1)
+                    Text(String(format: "%.1fs", playbackInterval))
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 16)
+
+                Picker("Modus", selection: $playbackMode) {
+                    ForEach(PlaybackMode.allCases, id: \.self) { mode in
+                        Text(mode.rawValue).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal, 16)
+            }
+            Spacer(minLength: 0)
+            }
+        }
+        .padding(.bottom, 20)
+    }
+
+    private var trajectoryView: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 10)
+                .fill(.black.opacity(0.18))
+            Canvas { context, size in
+                guard trajectoryPoints.count > 1 else { return }
+                var path = Path()
+                for (idx, p) in trajectoryPoints.enumerated() {
+                    let pt = CGPoint(x: p.x * size.width, y: (1.0 - p.y) * size.height)
+                    if idx == 0 { path.move(to: pt) } else { path.addLine(to: pt) }
+                }
+                context.stroke(path, with: .color(.cyan), lineWidth: 2)
+
+                if let current = interpolatedTrajectoryPoint ?? trajectoryPoints.last {
+                    let marker = CGRect(
+                        x: current.x * size.width - 4,
+                        y: (1.0 - current.y) * size.height - 4,
+                        width: 8,
+                        height: 8
+                    )
+                    context.fill(Path(ellipseIn: marker), with: .color(.yellow))
+                }
+            }
+            .padding(8)
+        }
+        .frame(height: 120)
+        .padding(.horizontal, 16)
     }
 
     /// Lädt im Hintergrund, wendet Ergebnis auf dem Hauptthread an.
@@ -523,8 +847,6 @@ struct Scan3DViewerView: View {
             do {
                 let s = try SCNScene(url: url, options: nil)
                 setSceneBackground(s)
-                // Erst Mirror-Fix und Zentrierung, danach Kamera hinzufügen – sonst landet die Kamera im gespiegelten Container und ist unsichtbar.
-                applyMirrorFix(to: s)
                 recenterModelInScene(s)
                 addAxisGizmo(to: s)
                 if s.rootNode.childNode(withName: cameraNodeName, recursively: true) == nil {
@@ -569,8 +891,8 @@ struct Scan3DViewerView: View {
         guard !vertices.isEmpty else { return nil }
         let maxPoints: Int
         switch displayStyle {
-        case .standard: maxPoints = 120_000
-        case .fineCloud: maxPoints = 120_000
+        case .standard: maxPoints = 20_000
+        case .fineCloud: maxPoints = 35_000
         }
         if vertices.count > maxPoints {
             switch displayStyle {
@@ -628,42 +950,22 @@ struct Scan3DViewerView: View {
         }
         let size = max(maxX - minX, maxY - minY, maxZ - minZ, 1)
         let camDist = size * 2.5
-        let quadSize: Float
-        switch displayStyle {
-        case .standard: quadSize = max(size * 0.004, 0.003)
-        case .fineCloud: quadSize = max(size * 0.0022, 0.0018)
+        var points = useVertices
+        let vertexData = Data(bytes: &points, count: points.count * MemoryLayout<SCNVector3>.size)
+        var pointColorsFloat: [Float] = []
+        pointColorsFloat.reserveCapacity(points.count * 4)
+        for i in 0..<points.count {
+            pointColorsFloat.append(Float(colors[i * 4]) / 255.0)
+            pointColorsFloat.append(Float(colors[i * 4 + 1]) / 255.0)
+            pointColorsFloat.append(Float(colors[i * 4 + 2]) / 255.0)
+            pointColorsFloat.append(1.0)
         }
-        let h = quadSize
-        var quadVertices: [SCNVector3] = []
-        var quadColorsFloat: [Float] = []
-        var quadIndices: [Int32] = []
-        for i in 0..<useVertices.count {
-            let x = useVertices[i].x
-            let y = useVertices[i].y
-            let z = useVertices[i].z
-            let r = Float(colors[i * 4]) / 255
-            let g = Float(colors[i * 4 + 1]) / 255
-            let b = Float(colors[i * 4 + 2]) / 255
-            let base = Int32(quadVertices.count)
-            quadVertices.append(contentsOf: [
-                SCNVector3(x - h, y - h, z),
-                SCNVector3(x + h, y - h, z),
-                SCNVector3(x + h, y + h, z),
-                SCNVector3(x - h, y + h, z)
-            ])
-            for _ in 0..<4 {
-                quadColorsFloat.append(contentsOf: [r, g, b, 1.0])
-            }
-            quadIndices.append(contentsOf: [base, base + 1, base + 2, base, base + 2, base + 3])
-        }
-        var qv = quadVertices
-        let vertexData = Data(bytes: &qv, count: qv.count * MemoryLayout<SCNVector3>.size)
-        var qcf = quadColorsFloat
-        let colorData = Data(bytes: &qcf, count: qcf.count * MemoryLayout<Float>.size)
+        var pcf = pointColorsFloat
+        let colorData = Data(bytes: &pcf, count: pcf.count * MemoryLayout<Float>.size)
         let vertexSource = SCNGeometrySource(
             data: vertexData,
             semantic: .vertex,
-            vectorCount: quadVertices.count,
+            vectorCount: points.count,
             usesFloatComponents: true,
             componentsPerVector: 3,
             bytesPerComponent: MemoryLayout<Float>.size,
@@ -673,19 +975,34 @@ struct Scan3DViewerView: View {
         let colorSource = SCNGeometrySource(
             data: colorData,
             semantic: .color,
-            vectorCount: quadVertices.count,
+            vectorCount: points.count,
             usesFloatComponents: true,
             componentsPerVector: 4,
             bytesPerComponent: MemoryLayout<Float>.size,
             dataOffset: 0,
             dataStride: 4 * MemoryLayout<Float>.size
         )
+        var pointIndices = [Int32](repeating: 0, count: points.count)
+        for i in 0..<points.count { pointIndices[i] = Int32(i) }
         let element = SCNGeometryElement(
-            data: Data(bytes: quadIndices, count: quadIndices.count * MemoryLayout<Int32>.size),
-            primitiveType: .triangles,
-            primitiveCount: quadIndices.count / 3,
+            data: Data(bytes: pointIndices, count: pointIndices.count * MemoryLayout<Int32>.size),
+            primitiveType: .point,
+            primitiveCount: points.count,
             bytesPerIndex: MemoryLayout<Int32>.size
         )
+        // Punktgröße auf Element-Ebene (nicht Material) einstellen.
+        switch displayStyle {
+        case .standard:
+            let s = CGFloat(max(0.5, min(8.0, pointCloudPointSize)))
+            element.pointSize = s
+            element.minimumPointScreenSpaceRadius = s
+            element.maximumPointScreenSpaceRadius = s
+        case .fineCloud:
+            let s = CGFloat(max(0.5, min(8.0, pointCloudPointSize)))
+            element.pointSize = s
+            element.minimumPointScreenSpaceRadius = s
+            element.maximumPointScreenSpaceRadius = s
+        }
         let geometry = SCNGeometry(sources: [vertexSource, colorSource], elements: [element])
         let mat = geometry.firstMaterial ?? SCNMaterial()
         mat.diffuse.contents = nil

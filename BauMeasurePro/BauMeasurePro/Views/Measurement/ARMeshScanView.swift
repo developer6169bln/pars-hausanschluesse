@@ -2,6 +2,8 @@ import SwiftUI
 import ARKit
 import SceneKit
 import CoreLocation
+import UIKit
+import ImageIO
 
 /// Scan-Verfahren: Punktwolke (RGB aus Tiefe) oder Mesh (Oberflächen-Rekonstruktion).
 enum ScanProcedure: String, CaseIterable {
@@ -9,11 +11,36 @@ enum ScanProcedure: String, CaseIterable {
     case mesh = "Mesh"
 }
 
+enum MeshProcessingPreset: String, CaseIterable {
+    case standard = "Standard"
+    case dense = "Dicht"
+    case custom = "Benutzerdefiniert"
+    case cloud = "Cloud"
+}
+
+enum ScanCaptureProfile: String, CaseIterable {
+    case pitDetail = "Baugrube Detail"
+    case pipelineLongRange = "Leitung Langstrecke"
+}
+
+struct MeshProcessingOptions {
+    var preset: MeshProcessingPreset = .standard
+    var captureProfile: ScanCaptureProfile = .pitDetail
+    var lightweightLivePreview: Bool = false
+    var autoPreviewThrottling: Bool = true
+    var depthRangeMeters: Double = 5.0
+    var voxelSizeMillimeters: Double = 4.0
+    var simplificationPercent: Double = 45.0
+    var autoCrop: Bool = true
+    var loopClosure: Bool = true
+    var fillHoles: Bool = true
+}
+
 /// 3D-Scan per LiDAR: Punktwolke (ScanAce-ähnlich, RGB) oder Mesh. Speichert als .ply (Punktwolke) oder .scn (Mesh). GPS wird mitgespeichert.
 struct ARMeshScanView: View {
     let scanId: UUID
     /// Callback: (Dateipfad, Latitude?, Longitude?, SceneOriginX?, Y?, Z?) – Origin = Kameraposition beim Speichern für Ausrichtung auf Luftbild.
-    var onSave: (String, Double?, Double?, Double?, Double?, Double?) -> Void
+    var onSave: (String, Double?, Double?, Double?, Double?, Double?, [ScanKeyframe]) -> Void
     var onCancel: () -> Void
 
     @State private var scanProcedure: ScanProcedure = .mesh
@@ -26,6 +53,15 @@ struct ARMeshScanView: View {
     @State private var requestExport = false
     @StateObject private var locationService = LocationService()
     @State private var trackingStateMessage: String = "normal"
+    @State private var meshPreviewPaused = false
+    @State private var meshSegmentationActive = false
+    @State private var savedSegmentCount = 0
+    @State private var processingOptions = MeshProcessingOptions()
+    @State private var detailLevel: Double = 0.75
+    @State private var liveQualityScore: Int = 0
+    @State private var liveQualityHint: String = "Initialisiere Scan..."
+    @AppStorage("pointCloudPointSize") private var pointCloudPointSize: Double = 1.0
+    @AppStorage("pointCloudDensity") private var pointCloudDensity: Double = 0.85
 
     private let storage = StorageService()
 
@@ -43,19 +79,27 @@ struct ARMeshScanView: View {
                 meshCount: $meshAnchorsCount,
                 pointCloudCount: $pointCloudCount,
                 supportsMesh: $supportsMesh,
+                meshPreviewPaused: $meshPreviewPaused,
+                meshSegmentationActive: $meshSegmentationActive,
+                savedSegmentCount: $savedSegmentCount,
+                processingOptions: processingOptions,
                 requestExport: $requestExport,
                 trackingState: $trackingStateMessage,
+                qualityScore: $liveQualityScore,
+                qualityHint: $liveQualityHint,
+                pointCloudPointSize: pointCloudPointSize,
+                pointCloudDensity: pointCloudDensity,
                 scanId: scanId,
                 storage: storage,
                 getLocation: {
                     guard let loc = locationService.location else { return nil }
                     return (loc.coordinate.latitude, loc.coordinate.longitude)
                 },
-                onExportDone: { path, lat, lon, ox, oy, oz in
+                onExportDone: { path, lat, lon, ox, oy, oz, keyframes in
                     isSaving = false
                     requestExport = false
                     if let p = path {
-                        onSave(p, lat, lon, ox, oy, oz)
+                        onSave(p, lat, lon, ox, oy, oz, keyframes)
                     } else {
                         errorMessage = "Export fehlgeschlagen."
                         showError = true
@@ -74,62 +118,12 @@ struct ARMeshScanView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                         .padding()
                 } else {
-                    Text("Scan-Verfahren: Mesh (Standard)")
-                        .font(.caption)
-                        .foregroundStyle(.white.opacity(0.9))
-                        .padding(.horizontal, 16)
-                        .padding(.top, 8)
-                        .padding(.vertical, 4)
-                        .background(.black.opacity(0.5))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-
-                    VStack(spacing: 6) {
-                        Text("Bewege das Gerät langsam, um die Umgebung zu erfassen.")
-                            .font(.caption)
-                            .foregroundStyle(.white)
-                        Text("Tipp für mehr Details: sehr langsam bewegen, gute Beleuchtung, jeden Bereich mehrfach von mehreren Seiten erfassen.")
-                            .font(.caption2)
-                            .foregroundStyle(.white.opacity(0.9))
-                            .multilineTextAlignment(.center)
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Vermessungs-Tipps:")
-                                .font(.caption2.bold())
-                                .foregroundStyle(.white)
-                            Text("• S-Pattern: Fläche in Zickzack abfahren (←←← / →→→ / ←←←) – LiDAR erhält mehr Winkel, bessere Genauigkeit.")
-                                .font(.caption2)
-                                .foregroundStyle(.white.opacity(0.9))
-                                .multilineTextAlignment(.leading)
-                            Text("• Baugrube: 3 Ebenen scannen – 1) Rand ablaufen, 2) halbe Höhe der Wände, 3) Boden – ergibt geschlossenes Mesh.")
-                                .font(.caption2)
-                                .foregroundStyle(.white.opacity(0.9))
-                                .multilineTextAlignment(.leading)
-                        }
-                        .padding(6)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(.black.opacity(0.4))
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
-                    }
-                    .padding(8)
-                    .background(.black.opacity(0.6))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                    .padding(.top, 8)
                     if scanProcedure == .mesh || meshAnchorsCount > 0 {
                         Text("\(meshAnchorsCount) Mesh-Bereiche erfasst")
                             .font(.caption2)
                             .foregroundStyle(.white.opacity(0.9))
                     }
-                    if trackingStateMessage == "limited" || trackingStateMessage == "notAvailable" {
-                        Text(trackingStateMessage == "limited"
-                             ? "Tracking eingeschränkt – langsam bewegen, mehr Struktur/Details erfassen"
-                             : "Tracking verloren – Gerät bewegen bis AR wieder stabil ist")
-                            .font(.caption2)
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .background(.orange.opacity(0.9))
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                            .padding(.top, 6)
-                    }
+                    qualityOverlay
                 }
                 Spacer()
                 HStack(spacing: 20) {
@@ -146,13 +140,166 @@ struct ARMeshScanView: View {
                     .buttonStyle(.borderedProminent)
                     .disabled(!supportsMesh || !hasAnyData || isSaving)
                 }
+                detailControlPanel
                 .padding(.bottom, 40)
             }
+        }
+        .onAppear {
+            applyDetailLevel(detailLevel)
+        }
+        .onChange(of: detailLevel) { _, newValue in
+            applyDetailLevel(newValue)
         }
         .alert("Fehler", isPresented: $showError) {
             Button("OK", role: .cancel) { showError = false }
         } message: {
             Text(errorMessage ?? "Unbekannter Fehler")
+        }
+    }
+
+    private var qualityOverlay: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Text("Scan-Qualität")
+                    .font(.caption2.bold())
+                    .foregroundStyle(.white)
+                Text("\(liveQualityScore)")
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.white)
+            }
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(.white.opacity(0.2))
+                    Capsule()
+                        .fill(liveQualityScore >= 70 ? .green : (liveQualityScore >= 45 ? .orange : .red))
+                        .frame(width: proxy.size.width * CGFloat(max(0, min(100, liveQualityScore))) / 100.0)
+                }
+            }
+            .frame(height: 8)
+            Text(liveQualityHint)
+                .font(.caption2)
+                .foregroundStyle(.white.opacity(0.95))
+        }
+        .padding(8)
+        .background(.black.opacity(0.6))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .padding(.top, 6)
+        .padding(.horizontal, 6)
+    }
+
+    private var detailControlPanel: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Detailgrad")
+                .font(.caption.bold())
+                .foregroundStyle(.white)
+            HStack {
+                Text("Grob")
+                    .font(.caption2)
+                    .foregroundStyle(.white.opacity(0.8))
+                Slider(value: $detailLevel, in: 0...1, step: 0.01)
+                Text("Fein")
+                    .font(.caption2)
+                    .foregroundStyle(.white.opacity(0.8))
+            }
+            .font(.caption2)
+            .foregroundStyle(.white)
+            HStack {
+                Text("Punktgröße")
+                    .font(.caption2)
+                    .foregroundStyle(.white.opacity(0.8))
+                Slider(value: $pointCloudPointSize, in: 0.5...4.0, step: 0.1)
+                Text(String(format: "%.1f", pointCloudPointSize))
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.white.opacity(0.9))
+            }
+            if scanProcedure == .pointCloud {
+                HStack {
+                    Text("Punktdichte")
+                        .font(.caption2)
+                        .foregroundStyle(.white.opacity(0.8))
+                    Slider(value: $pointCloudDensity, in: 0.2...1.0, step: 0.05)
+                    Text("\(Int(pointCloudDensity * 100))%")
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(.white.opacity(0.9))
+                }
+            }
+            Text(detailModeDescription)
+                .font(.caption2)
+                .foregroundStyle(.white.opacity(0.95))
+        }
+        .font(.caption2)
+        .foregroundStyle(.white)
+        .padding(10)
+        .background(.black.opacity(0.6))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .padding(.horizontal, 10)
+    }
+
+    private var detailModeDescription: String {
+        if detailLevel >= 0.90 {
+            return "Superfein: Punktwolke Max-Detail für kritische Bereiche (langsam scannen)."
+        } else if detailLevel >= 0.72 {
+            return "Fein: Punktwolke aktiv (maximale Details, höherer Speicherbedarf)."
+        } else if detailLevel >= 0.38 {
+            return "Mittel: Mesh mit hoher Detailtreue für Baugruben."
+        } else {
+            return "Grob: Mesh optimiert für lange Leitungsstrecken (stabil und leicht)."
+        }
+    }
+
+    private func applyDetailLevel(_ value: Double) {
+        if value >= 0.90 {
+            // Superfein => Punktwolke maximal
+            scanProcedure = .pointCloud
+            processingOptions.captureProfile = .pitDetail
+            processingOptions.preset = .dense
+            processingOptions.depthRangeMeters = 4.5
+            processingOptions.voxelSizeMillimeters = 2
+            processingOptions.simplificationPercent = 0
+            processingOptions.autoCrop = false
+            processingOptions.loopClosure = true
+            processingOptions.fillHoles = true
+            processingOptions.lightweightLivePreview = false
+            processingOptions.autoPreviewThrottling = true
+        } else if value >= 0.72 {
+            // Fein => Wolke
+            scanProcedure = .pointCloud
+            processingOptions.captureProfile = .pitDetail
+            processingOptions.preset = .dense
+            processingOptions.depthRangeMeters = 6
+            processingOptions.voxelSizeMillimeters = 2
+            processingOptions.simplificationPercent = 10
+            processingOptions.autoCrop = false
+            processingOptions.loopClosure = true
+            processingOptions.fillHoles = true
+            processingOptions.lightweightLivePreview = false
+            processingOptions.autoPreviewThrottling = true
+        } else if value >= 0.38 {
+            // Mittel => Mesh detailreich
+            scanProcedure = .mesh
+            processingOptions.captureProfile = .pitDetail
+            processingOptions.preset = .dense
+            processingOptions.depthRangeMeters = 6
+            processingOptions.voxelSizeMillimeters = 3
+            processingOptions.simplificationPercent = 25
+            processingOptions.autoCrop = true
+            processingOptions.loopClosure = true
+            processingOptions.fillHoles = true
+            processingOptions.lightweightLivePreview = true
+            processingOptions.autoPreviewThrottling = true
+        } else {
+            // Grob => Mesh langstrecke
+            scanProcedure = .mesh
+            processingOptions.captureProfile = .pipelineLongRange
+            processingOptions.preset = .cloud
+            processingOptions.depthRangeMeters = 10
+            processingOptions.voxelSizeMillimeters = 7
+            processingOptions.simplificationPercent = 60
+            processingOptions.autoCrop = true
+            processingOptions.loopClosure = true
+            processingOptions.fillHoles = false
+            processingOptions.lightweightLivePreview = true
+            processingOptions.autoPreviewThrottling = true
         }
     }
 }
@@ -164,12 +311,20 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
     @Binding var meshCount: Int
     @Binding var pointCloudCount: Int
     @Binding var supportsMesh: Bool
+    @Binding var meshPreviewPaused: Bool
+    @Binding var meshSegmentationActive: Bool
+    @Binding var savedSegmentCount: Int
+    var processingOptions: MeshProcessingOptions
     @Binding var requestExport: Bool
     @Binding var trackingState: String
+    @Binding var qualityScore: Int
+    @Binding var qualityHint: String
+    var pointCloudPointSize: Double
+    var pointCloudDensity: Double
     var scanId: UUID
     var storage: StorageService
     var getLocation: () -> (Double, Double)?
-    var onExportDone: (String?, Double?, Double?, Double?, Double?, Double?) -> Void
+    var onExportDone: (String?, Double?, Double?, Double?, Double?, Double?, [ScanKeyframe]) -> Void
 
     private func makeConfig(usePointCloud: Bool) -> ARWorldTrackingConfiguration {
         let config = ARWorldTrackingConfiguration()
@@ -202,19 +357,33 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
         context.coordinator.meshCountBinding = $meshCount
         context.coordinator.pointCloudCountBinding = $pointCloudCount
         context.coordinator.supportsMeshBinding = $supportsMesh
+        context.coordinator.meshPreviewPausedBinding = $meshPreviewPaused
+        context.coordinator.meshSegmentationActiveBinding = $meshSegmentationActive
+        context.coordinator.savedSegmentCountBinding = $savedSegmentCount
         context.coordinator.requestExportBinding = $requestExport
         context.coordinator.trackingStateBinding = $trackingState
+        context.coordinator.savedSegmentCountBinding = $savedSegmentCount
+        context.coordinator.qualityScoreBinding = $qualityScore
+        context.coordinator.qualityHintBinding = $qualityHint
         context.coordinator.storage = storage
         context.coordinator.scanId = scanId
         context.coordinator.getLocation = getLocation
         context.coordinator.onExportDone = onExportDone
         context.coordinator.pointCloudService = PointCloudService()
         context.coordinator.scanProcedure = scanProcedure
+        context.coordinator.processingOptions = processingOptions
+        context.coordinator.pointCloudPointSize = pointCloudPointSize
+        context.coordinator.pointCloudDensity = pointCloudDensity
+        context.coordinator.resetCaptureState()
 
         let pointCloudNode = SCNNode()
         pointCloudNode.name = "PointCloudNode"
         sceneView.scene.rootNode.addChildNode(pointCloudNode)
         context.coordinator.pointCloudNode = pointCloudNode
+        let scanPathNode = SCNNode()
+        scanPathNode.name = "ScanPathNode"
+        sceneView.scene.rootNode.addChildNode(scanPathNode)
+        context.coordinator.scanPathRootNode = scanPathNode
 
         if !ARWorldTrackingConfiguration.supportsSceneReconstruction(.mesh) && !ARWorldTrackingConfiguration.supportsSceneReconstruction(.meshWithClassification) {
             DispatchQueue.main.async { supportsMesh = false }
@@ -228,6 +397,12 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
     func updateUIView(_ sceneView: ARSCNView, context: Context) {
         context.coordinator.scanProcedure = scanProcedure
         context.coordinator.trackingStateBinding = $trackingState
+        context.coordinator.qualityScoreBinding = $qualityScore
+        context.coordinator.qualityHintBinding = $qualityHint
+        context.coordinator.processingOptions = processingOptions
+        context.coordinator.pointCloudPointSize = pointCloudPointSize
+        context.coordinator.pointCloudDensity = pointCloudDensity
+        context.coordinator.updatePointCloudSamplingConfiguration()
         if requestExport {
             context.coordinator.performExport()
         }
@@ -248,10 +423,16 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
         var meshCountBinding: Binding<Int>?
         var pointCloudCountBinding: Binding<Int>?
         var supportsMeshBinding: Binding<Bool>?
+        var meshPreviewPausedBinding: Binding<Bool>?
+        var meshSegmentationActiveBinding: Binding<Bool>?
+        var savedSegmentCountBinding: Binding<Int>?
         var requestExportBinding: Binding<Bool>?
         var trackingStateBinding: Binding<String>?
+        var qualityScoreBinding: Binding<Int>?
+        var qualityHintBinding: Binding<String>?
         var knownMeshNodes: [UUID: SCNNode] = [:]
         var pointCloudNode: SCNNode?
+        var scanPathRootNode: SCNNode?
         var pointCloudService: PointCloudService?
         var scanProcedure: ScanProcedure = .pointCloud
         var lastAppliedProcedure: ScanProcedure?
@@ -259,8 +440,36 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
         var storage: StorageService?
         var scanId: UUID?
         var getLocation: (() -> (Double, Double)?)?
-        var onExportDone: ((String?, Double?, Double?, Double?, Double?, Double?) -> Void)?
+        var onExportDone: ((String?, Double?, Double?, Double?, Double?, Double?, [ScanKeyframe]) -> Void)?
+        var processingOptions = MeshProcessingOptions()
+        private var capturedKeyframes: [ScanKeyframe] = []
+        private var lastKeyframeCaptureTime: CFTimeInterval = 0
+        private let keyframeIntervalSeconds: CFTimeInterval = 0.8
+        private let maxKeyframes = 120
         private var lastReportedTrackingState: String = ""
+        /// In "Live-Vorschau (leicht)" nur wenige Anker visualisieren.
+        private let maxLiveMeshAnchors = 8
+        private var isMeshPreviewPaused = true
+        /// Ab dieser Ankerzahl: Segmentieren + Rekonstruktion zurücksetzen.
+        private let segmentationThresholdAnchors = 18
+        private var cachedSegmentPaths: [String] = []
+        private var nextSegmentIndex: Int = 0
+        private var isFlushingMeshSegment = false
+        private var isExportInProgress = false
+        private var lastFrameTimestamp: TimeInterval?
+        private var lastFramePosition: simd_float3?
+        private var lastKeyframePosition: simd_float3?
+        private var lastKeyframeForward: simd_float3?
+        private var lastObservedSpeedMps: Float = 0
+        private var autoPausedUntil: CFTimeInterval = 0
+        private var lastPathPoint: simd_float3?
+        private var pathSegmentNodes: [SCNNode] = []
+        private let maxPathSegments = 1200
+        private var currentQualityScore: Int = 0
+        var pointCloudPointSize: Double = 1.0
+        var pointCloudDensity: Double = 0.85
+        private var pointCloudPreviewMaxPoints: Int = 8_000
+        private var isPointCloudFrameProcessing = false
 
         private var lastGeometryUpdateTime: CFTimeInterval = 0
 
@@ -280,11 +489,20 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
                     self?.trackingStateBinding?.wrappedValue = stateStr
                 }
             }
+            updateLiveQuality(frame: frame, trackingState: stateStr)
+            updateScanPath(with: frame)
+
+            captureKeyframeIfNeeded(from: frame)
 
             // Punktwolke-Workflow unverändert
             guard scanProcedure == .pointCloud, let service = pointCloudService else { return }
+            guard !isPointCloudFrameProcessing else { return }
+            isPointCloudFrameProcessing = true
             DispatchQueue.global(qos: .userInitiated).async { [weak service] in
                 service?.addPoints(from: frame)
+                DispatchQueue.main.async { [weak self] in
+                    self?.isPointCloudFrameProcessing = false
+                }
             }
             frameCount += 1
             let count = service.pointCount
@@ -297,8 +515,13 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
             guard count > 0, (now - lastGeometryUpdateTime) > 1.2 else { return }
             lastGeometryUpdateTime = now
             let node = pointCloudNode
-            DispatchQueue.global(qos: .userInitiated).async { [weak service, weak node] in
-                guard let service = service, let node = node, let geometry = service.makeSceneKitGeometry(maxPoints: 30_000) else { return }
+            DispatchQueue.global(qos: .userInitiated).async { [weak service, weak node, weak self] in
+                // Live-Punktwolke dynamisch je nach Dichteprofil begrenzen.
+                guard let service = service, let node = node,
+                      let geometry = service.makeSceneKitGeometry(
+                        maxPoints: self?.pointCloudPreviewMaxPoints ?? 8_000,
+                        pointSize: CGFloat(self?.pointCloudPointSize ?? 1.0)
+                      ) else { return }
                 DispatchQueue.main.async {
                     node.geometry = geometry
                     node.position = SCNVector3(0, 0, 0)
@@ -312,11 +535,37 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
             pointCloudCountBinding?.wrappedValue = service.pointCount
         }
 
+        func updatePointCloudSamplingConfiguration() {
+            guard let service = pointCloudService else { return }
+            let d = max(0.2, min(1.0, pointCloudDensity))
+            // Dicht = kleines Voxel + weniger Pixel-Skipping.
+            service.voxelSize = Float(0.002 + (1.0 - d) * 0.010) // 2 mm ... 12 mm
+            if d >= 0.90 {
+                service.depthStep = 1
+            } else if d >= 0.70 {
+                service.depthStep = 2
+            } else if d >= 0.45 {
+                service.depthStep = 3
+            } else {
+                service.depthStep = 4
+            }
+            // Lange Strecken: RAM stabil halten, aber bei hoher Dichte mehr Punkte erlauben.
+            service.maxStoredPoints = Int(160_000 + (d * 240_000)) // 208k ... 400k
+            pointCloudPreviewMaxPoints = Int(4_000 + (d * 20_000))
+        }
+
         func session(_ session: ARSession, didAdd anchors: [ARAnchor]) {
             guard let view = sceneView else { return }
+            updatePreviewMode(session: session)
+            maybeFlushMeshSegment(session: session)
+            if isMeshPreviewPaused {
+                updateMeshCount(session: session)
+                return
+            }
             for anchor in anchors {
                 guard let meshAnchor = anchor as? ARMeshAnchor else { continue }
                 let geo = SCNGeometry.fromAnchor(meshAnchor: meshAnchor)
+                    .optimized(triangleEdgeLimitMeters: currentEdgeLimitMeters(multiplier: 2.4))
                 let node = SCNNode(geometry: geo)
                 node.simdTransform = meshAnchor.transform
                 node.name = anchor.identifier.uuidString
@@ -328,10 +577,17 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
 
         func session(_ session: ARSession, didUpdate anchors: [ARAnchor]) {
             guard let view = sceneView else { return }
+            updatePreviewMode(session: session)
+            maybeFlushMeshSegment(session: session)
+            if isMeshPreviewPaused {
+                updateMeshCount(session: session)
+                return
+            }
             for anchor in anchors {
                 guard let meshAnchor = anchor as? ARMeshAnchor,
                       let node = knownMeshNodes[anchor.identifier] else { continue }
                 node.geometry = SCNGeometry.fromAnchor(meshAnchor: meshAnchor)
+                    .optimized(triangleEdgeLimitMeters: currentEdgeLimitMeters(multiplier: 2.4))
                 node.simdTransform = meshAnchor.transform
             }
             updateMeshCount(session: session)
@@ -354,18 +610,129 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
             }
         }
 
+        private func updatePreviewMode(session: ARSession) {
+            if !processingOptions.lightweightLivePreview {
+                if !isMeshPreviewPaused {
+                    isMeshPreviewPaused = true
+                }
+                DispatchQueue.main.async { [weak self] in
+                    self?.meshPreviewPausedBinding?.wrappedValue = true
+                }
+                if !knownMeshNodes.isEmpty {
+                    // Speicher freigeben: niemals Live-Geometrie halten.
+                    for (_, node) in knownMeshNodes {
+                        node.removeFromParentNode()
+                    }
+                    knownMeshNodes.removeAll()
+                }
+                return
+            }
+
+            let count = session.currentFrame?.anchors.compactMap { $0 as? ARMeshAnchor }.count ?? 0
+            let now = CACurrentMediaTime()
+            if processingOptions.autoPreviewThrottling {
+                if count > maxLiveMeshAnchors + 4 {
+                    autoPausedUntil = now + 1.6
+                } else if lastReportedTrackingState == "limited" || lastReportedTrackingState == "notAvailable" {
+                    autoPausedUntil = now + 1.2
+                }
+            }
+            let forcePause = processingOptions.autoPreviewThrottling && now < autoPausedUntil
+            let shouldPause = count > maxLiveMeshAnchors
+            let nextPauseState = shouldPause || forcePause
+            guard nextPauseState != isMeshPreviewPaused else { return }
+            isMeshPreviewPaused = nextPauseState
+            DispatchQueue.main.async { [weak self] in
+                self?.meshPreviewPausedBinding?.wrappedValue = nextPauseState
+            }
+            if nextPauseState {
+                // Speicher freigeben: vorhandene Live-Mesh-Knoten entfernen.
+                for (_, node) in knownMeshNodes {
+                    node.removeFromParentNode()
+                }
+                knownMeshNodes.removeAll()
+            }
+        }
+
+        private func maybeFlushMeshSegment(session: ARSession) {
+            guard scanProcedure == .mesh else { return }
+            guard !isFlushingMeshSegment else { return }
+            guard let frame = session.currentFrame else { return }
+            let meshAnchors = frame.anchors.compactMap { $0 as? ARMeshAnchor }
+            guard meshAnchors.count >= segmentationThresholdAnchors else { return }
+            isFlushingMeshSegment = true
+            DispatchQueue.main.async { [weak self] in
+                self?.meshSegmentationActiveBinding?.wrappedValue = true
+            }
+
+            // Aktuelle Anker in leichtes Zwischenmodell übernehmen.
+            var segmentNodes: [SCNNode] = []
+            segmentNodes.reserveCapacity(meshAnchors.count)
+            for meshAnchor in meshAnchors {
+                if processingOptions.autoCrop {
+                    let cam = frame.camera.transform.columns.3
+                    let meshPos = meshAnchor.transform.columns.3
+                    let d = simd_distance(simd_float3(cam.x, cam.y, cam.z), simd_float3(meshPos.x, meshPos.y, meshPos.z))
+                    if d > Float(processingOptions.depthRangeMeters) { continue }
+                }
+                guard let geo = SCNGeometry.copyFromAnchor(meshAnchor: meshAnchor)?
+                    .optimized(triangleEdgeLimitMeters: currentEdgeLimitMeters(multiplier: 1.5)) else { continue }
+                let node = SCNNode(geometry: geo)
+                node.simdTransform = meshAnchor.transform
+                segmentNodes.append(node)
+            }
+
+            if !segmentNodes.isEmpty, let storage, let scanId {
+                let segmentScene = SCNScene()
+                for node in segmentNodes {
+                    segmentScene.rootNode.addChildNode(node)
+                }
+                if let relativePath = storage.saveMeshSegmentScene(segmentScene, scanId: scanId, segmentIndex: nextSegmentIndex) {
+                    cachedSegmentPaths.append(relativePath)
+                    nextSegmentIndex += 1
+                    DispatchQueue.main.async { [weak self] in
+                        self?.savedSegmentCountBinding?.wrappedValue = self?.cachedSegmentPaths.count ?? 0
+                    }
+                }
+            }
+
+            // Live-Nodes entfernen und Rekonstruktion zurücksetzen (ohne Tracking-Reset).
+            for (_, node) in knownMeshNodes {
+                node.removeFromParentNode()
+            }
+            knownMeshNodes.removeAll()
+
+            let cfg = ARWorldTrackingConfiguration()
+            cfg.worldAlignment = .gravity
+            cfg.planeDetection = [.horizontal, .vertical]
+            cfg.environmentTexturing = .automatic
+            if ARWorldTrackingConfiguration.supportsSceneReconstruction(.meshWithClassification) {
+                cfg.sceneReconstruction = .meshWithClassification
+            } else if ARWorldTrackingConfiguration.supportsSceneReconstruction(.mesh) {
+                cfg.sceneReconstruction = .mesh
+            } else {
+                cfg.sceneReconstruction = []
+            }
+            session.run(cfg, options: [.resetSceneReconstruction])
+            isFlushingMeshSegment = false
+        }
+
         func performExport() {
+            guard !isExportInProgress else { return }
+            isExportInProgress = true
             requestExportBinding?.wrappedValue = false
             guard let sceneView = sceneView,
                   let storage = storage,
                   let scanId = scanId,
                   let done = onExportDone else {
-                DispatchQueue.main.async { self.onExportDone?(nil, nil, nil, nil, nil, nil) }
+                isExportInProgress = false
+                DispatchQueue.main.async { self.onExportDone?(nil, nil, nil, nil, nil, nil, []) }
                 return
             }
             let session = sceneView.session
             guard let frame = session.currentFrame else {
-                DispatchQueue.main.async { done(nil, nil, nil, nil, nil, nil) }
+                isExportInProgress = false
+                DispatchQueue.main.async { done(nil, nil, nil, nil, nil, nil, []) }
                 return
             }
             let cam = frame.camera.transform
@@ -373,18 +740,28 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
             let originY = Double(cam.columns.3.y)
             let originZ = Double(cam.columns.3.z)
             let loc = getLocation?()
+            if capturedKeyframes.isEmpty, let fallback = makeKeyframe(from: frame, storage: storage) {
+                capturedKeyframes.append(fallback)
+            }
+            DispatchQueue.main.async { [weak self] in
+                self?.savedSegmentCountBinding?.wrappedValue = self?.cachedSegmentPaths.count ?? 0
+            }
 
             if scanProcedure == .pointCloud, let service = pointCloudService, service.pointCount > 0 {
                 let scanIdCopy = scanId
                 let storageCopy = storage
-                DispatchQueue.global(qos: .userInitiated).async {
+                DispatchQueue.global(qos: .userInitiated).async { [weak self] in
                     guard let plyData = service.exportPLY() else {
-                        DispatchQueue.main.async { done(nil, loc?.0, loc?.1, originX, originY, originZ) }
+                        DispatchQueue.main.async {
+                            self?.isExportInProgress = false
+                            done(nil, loc?.0, loc?.1, originX, originY, originZ, self?.capturedKeyframes ?? [])
+                        }
                         return
                     }
                     let path = storageCopy.savePointCloudPLY(plyData, scanId: scanIdCopy)
                     DispatchQueue.main.async {
-                        done(path, loc?.0, loc?.1, originX, originY, originZ)
+                        self?.isExportInProgress = false
+                        done(path, loc?.0, loc?.1, originX, originY, originZ, self?.capturedKeyframes ?? [])
                     }
                 }
                 return
@@ -396,6 +773,7 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
             let meshAnchors = frame.anchors.compactMap { $0 as? ARMeshAnchor }
             let storageCopy = storage
             let scanIdCopy = scanId
+            let segmentPaths = cachedSegmentPaths
 
             DispatchQueue.global(qos: .userInitiated).async { [weak self] in
                 autoreleasepool {
@@ -403,10 +781,25 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
                     var nodes: [SCNNode] = []
                     nodes.reserveCapacity(meshAnchors.count)
 
+                    for relative in segmentPaths {
+                        let full = storageCopy.fullPath(forStoredPath: relative)
+                        let url = URL(fileURLWithPath: full)
+                        if let loaded = try? SCNScene(url: url) {
+                            for child in loaded.rootNode.childNodes {
+                                scene.rootNode.addChildNode(child.clone())
+                            }
+                        }
+                    }
                     for meshAnchor in meshAnchors {
+                        if self?.processingOptions.autoCrop == true {
+                            let camPos = frame.camera.transform.columns.3
+                            let meshPos = meshAnchor.transform.columns.3
+                            let d = simd_distance(simd_float3(camPos.x, camPos.y, camPos.z), simd_float3(meshPos.x, meshPos.y, meshPos.z))
+                            if d > Float(self?.processingOptions.depthRangeMeters ?? 5) { continue }
+                        }
                         let geo: SCNGeometry? = SCNGeometry.fromAnchor(meshAnchor: meshAnchor, frame: frame, orientation: orientation)
                             ?? SCNGeometry.copyFromAnchor(meshAnchor: meshAnchor)
-                        guard let geo = geo?.optimized(triangleEdgeLimitMeters: 0.02) else { continue } // 2 cm
+                        guard let geo = geo?.optimized(triangleEdgeLimitMeters: self?.currentEdgeLimitMeters(multiplier: 1.0) ?? 0.02) else { continue }
                         for mat in geo.materials {
                             mat.transparency = 1.0
                             mat.transparencyMode = .default
@@ -419,10 +812,231 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
 
                     let path = storageCopy.save3DScene(scene, scanId: scanIdCopy)
                     DispatchQueue.main.async {
-                        done(path, loc?.0, loc?.1, originX, originY, originZ)
+                        self?.isExportInProgress = false
+                        storageCopy.clearMeshSegments(scanId: scanIdCopy)
+                        done(path, loc?.0, loc?.1, originX, originY, originZ, self?.capturedKeyframes ?? [])
                     }
                 }
             }
+        }
+
+        func resetCaptureState() {
+            updatePointCloudSamplingConfiguration()
+            capturedKeyframes.removeAll()
+            lastKeyframeCaptureTime = 0
+            isExportInProgress = false
+            cachedSegmentPaths.removeAll()
+            nextSegmentIndex = 0
+            savedSegmentCountBinding?.wrappedValue = 0
+            if let storage, let scanId {
+                storage.clearMeshSegments(scanId: scanId)
+            }
+            lastFrameTimestamp = nil
+            lastFramePosition = nil
+            lastKeyframePosition = nil
+            lastKeyframeForward = nil
+            lastObservedSpeedMps = 0
+            lastPathPoint = nil
+            for node in pathSegmentNodes {
+                node.removeFromParentNode()
+            }
+            pathSegmentNodes.removeAll()
+        }
+
+        private func updateScanPath(with frame: ARFrame) {
+            guard let root = scanPathRootNode else { return }
+            let t = frame.camera.transform.columns.3
+            let current = simd_float3(t.x, t.y, t.z)
+            guard let previous = lastPathPoint else {
+                lastPathPoint = current
+                return
+            }
+            let distance = simd_distance(current, previous)
+            // Kleine Bewegungen ignorieren, damit die Linie sauber und performant bleibt.
+            guard distance >= 0.08 else { return }
+            lastPathPoint = current
+
+            let color: UIColor
+            if currentQualityScore >= 70 {
+                color = UIColor.systemGreen.withAlphaComponent(0.9)
+            } else if currentQualityScore >= 45 {
+                color = UIColor.systemOrange.withAlphaComponent(0.9)
+            } else {
+                color = UIColor.systemRed.withAlphaComponent(0.9)
+            }
+            let segment = makeLineSegmentNode(from: previous, to: current, color: color)
+            root.addChildNode(segment)
+            pathSegmentNodes.append(segment)
+            if pathSegmentNodes.count > maxPathSegments, let old = pathSegmentNodes.first {
+                old.removeFromParentNode()
+                pathSegmentNodes.removeFirst()
+            }
+        }
+
+        private func makeLineSegmentNode(from a: simd_float3, to b: simd_float3, color: UIColor) -> SCNNode {
+            let dir = b - a
+            let length = simd_length(dir)
+            let cylinder = SCNCylinder(radius: 0.01, height: CGFloat(max(0.001, length)))
+            cylinder.radialSegmentCount = 6
+            cylinder.firstMaterial?.diffuse.contents = color
+            cylinder.firstMaterial?.emission.contents = color
+            let node = SCNNode(geometry: cylinder)
+            node.simdPosition = (a + b) * 0.5
+
+            // Standardzylinder zeigt entlang Y-Achse -> auf Segmentrichtung ausrichten.
+            let up = simd_float3(0, 1, 0)
+            let nDir = simd_normalize(dir)
+            let axis = simd_cross(up, nDir)
+            let dot = max(-1.0, min(1.0, simd_dot(up, nDir)))
+            let angle = acos(dot)
+            if simd_length(axis) > 0.0001, angle.isFinite {
+                node.simdOrientation = simd_quatf(angle: angle, axis: simd_normalize(axis))
+            }
+            return node
+        }
+
+        private func captureKeyframeIfNeeded(from frame: ARFrame) {
+            guard let storage else { return }
+            let now = CACurrentMediaTime()
+            let dynamicInterval = adaptiveKeyframeInterval(for: lastObservedSpeedMps)
+            guard now - lastKeyframeCaptureTime >= dynamicInterval else { return }
+            guard capturedKeyframes.count < maxKeyframes else { return }
+            guard isFrameEligibleForKeyframe(frame: frame) else { return }
+            lastKeyframeCaptureTime = now
+
+            guard let keyframe = makeKeyframe(from: frame, storage: storage) else { return }
+            capturedKeyframes.append(keyframe)
+            let t = frame.camera.transform.columns.3
+            lastKeyframePosition = simd_float3(t.x, t.y, t.z)
+            let f = frame.camera.transform.columns.2
+            lastKeyframeForward = simd_normalize(simd_float3(-f.x, -f.y, -f.z))
+        }
+
+        private func adaptiveKeyframeInterval(for speed: Float) -> CFTimeInterval {
+            switch processingOptions.captureProfile {
+            case .pitDetail:
+                if speed < 0.15 { return 0.55 }
+                if speed < 0.45 { return 0.45 }
+                if speed < 0.9 { return 0.65 }
+                return 0.85
+            case .pipelineLongRange:
+                if speed < 0.15 { return 0.9 }
+                if speed < 0.45 { return 0.75 }
+                if speed < 0.9 { return 0.65 }
+                return 0.8
+            }
+        }
+
+        private func isFrameEligibleForKeyframe(frame: ARFrame) -> Bool {
+            let t = frame.camera.transform.columns.3
+            let currentPos = simd_float3(t.x, t.y, t.z)
+            let f = frame.camera.transform.columns.2
+            let currentForward = simd_normalize(simd_float3(-f.x, -f.y, -f.z))
+
+            guard let lastPos = lastKeyframePosition, let lastForward = lastKeyframeForward else {
+                return true
+            }
+            let moved = simd_distance(currentPos, lastPos)
+            let angle = acos(max(-1, min(1, simd_dot(currentForward, lastForward))))
+            let minMove: Float = (processingOptions.captureProfile == .pitDetail) ? 0.08 : 0.18
+            let minTurn: Float = (processingOptions.captureProfile == .pitDetail) ? 0.12 : 0.16
+            return moved >= minMove || angle >= minTurn
+        }
+
+        private func updateLiveQuality(frame: ARFrame, trackingState: String) {
+            let nowT = frame.timestamp
+            let cam = frame.camera.transform.columns.3
+            let currentPos = simd_float3(cam.x, cam.y, cam.z)
+            var speed: Float = lastObservedSpeedMps
+            if let prevPos = lastFramePosition, let prevT = lastFrameTimestamp {
+                let dt = max(0.001, nowT - prevT)
+                speed = simd_distance(currentPos, prevPos) / Float(dt)
+            }
+            lastFramePosition = currentPos
+            lastFrameTimestamp = nowT
+            lastObservedSpeedMps = speed
+
+            let meshCount = frame.anchors.compactMap { $0 as? ARMeshAnchor }.count
+            var score = 0
+            switch trackingState {
+            case "normal": score += 60
+            case "limited": score += 35
+            default: score += 10
+            }
+            if speed >= 0.08 && speed <= 0.55 {
+                score += 25
+            } else if speed > 0.55 && speed <= 1.0 {
+                score += 12
+            } else if speed > 1.0 {
+                score -= 10
+            } else {
+                score += 5
+            }
+            score += min(15, meshCount / 3)
+            if isMeshPreviewPaused { score -= 6 }
+            score = max(0, min(100, score))
+
+            let hint: String
+            if trackingState == "notAvailable" {
+                hint = "Tracking verloren: Gerät langsam schwenken bis AR stabil ist."
+            } else if trackingState == "limited" {
+                hint = "Tracking eingeschränkt: mehr Struktur im Bild erfassen."
+            } else if speed > 1.0 {
+                hint = "Zu schnell: für mehr Details langsamer bewegen."
+            } else if speed < 0.05 {
+                hint = "Etwas weiterbewegen, damit neue Bereiche erfasst werden."
+            } else if meshCount < 8 {
+                hint = "Mehr Flächen aus mehreren Winkeln scannen."
+            } else {
+                hint = "Gute Scan-Qualität."
+            }
+
+            DispatchQueue.main.async { [weak self] in
+                self?.qualityScoreBinding?.wrappedValue = score
+                self?.qualityHintBinding?.wrappedValue = hint
+            }
+            currentQualityScore = score
+        }
+
+        private func makeKeyframe(from frame: ARFrame, storage: StorageService) -> ScanKeyframe? {
+            let imageBuffer = frame.capturedImage
+            let ciImage = CIImage(cvPixelBuffer: imageBuffer)
+            // Dynamische Ausrichtung: funktioniert für Hoch- und Querformat.
+            let orientedCIImage = ciImage.oriented(currentImageOrientation())
+            let ciContext = CIContext()
+            guard let cgImage = ciContext.createCGImage(orientedCIImage, from: orientedCIImage.extent) else { return nil }
+            let image = UIImage(cgImage: cgImage)
+            guard let path = storage.saveImage(image, projectName: nil, overlay: nil, exportToAlbum: false) else { return nil }
+            let t = frame.camera.transform.columns.3
+            return ScanKeyframe(
+                imagePath: path,
+                timestamp: Date(),
+                positionX: Double(t.x),
+                positionY: Double(t.y),
+                positionZ: Double(t.z)
+            )
+        }
+
+        private func currentImageOrientation() -> CGImagePropertyOrientation {
+            let uiOrientation = sceneView?.window?.windowScene?.interfaceOrientation ?? .portrait
+            switch uiOrientation {
+            case .portrait:
+                return .right
+            case .portraitUpsideDown:
+                return .left
+            case .landscapeLeft:
+                return .down
+            case .landscapeRight:
+                return .up
+            default:
+                return .right
+            }
+        }
+
+        private func currentEdgeLimitMeters(multiplier: Double) -> Float {
+            let voxelM = max(0.002, min(0.02, processingOptions.voxelSizeMillimeters / 1000.0))
+            let simplifyFactor = 1.0 + (processingOptions.simplificationPercent / 100.0)
+            return Float(voxelM * simplifyFactor * multiplier)
         }
     }
 }

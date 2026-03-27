@@ -33,6 +33,10 @@ struct ARMeasureView: View {
     @State private var pendingPolylineSegmentMeters: [Double]?
     /// AR-Tracking-Status: „normal“, „limited“, „notAvailable“ – bei limited/notAvailable Warnung anzeigen.
     @State private var trackingStateMessage: String = "normal"
+    /// true = Live-Strecke vom letzten Punkt zum Fadenkreuz (Mitte), wie beim iPhone-Maßband.
+    @State private var showLiveMeasureHint = false
+    /// true = Messpunkte werden an der Bildschirmmitte (Fadenkreuz) gesetzt; Tap bestätigt nur. false = Punkt an Tap-Position.
+    @State private var placePointsAtScreenCenter = true
 
     private var nextMeasurementIndex: Int {
         (viewModel.project(byId: projectId)?.measurements.count ?? 0) + 1
@@ -80,6 +84,11 @@ struct ARMeasureView: View {
         ZStack {
             arScene
             overlayContent
+            if showLiveMeasureHint && placePointsAtScreenCenter {
+                ARMeasurementReticleOverlay()
+                    .ignoresSafeArea()
+                    .accessibilityHidden(true)
+            }
         }
     }
 
@@ -119,19 +128,29 @@ struct ARMeasureView: View {
             },
             storage: storage,
             projectId: projectId,
-            onTrackingStateChange: { trackingStateMessage = $0 }
+            onTrackingStateChange: { trackingStateMessage = $0 },
+            showLiveMeasureHint: $showLiveMeasureHint,
+            placePointsAtScreenCenter: placePointsAtScreenCenter
         )
         .ignoresSafeArea()
         .zIndex(0)
     }
 
+    /// Unten: Steuerung (Toggle, Zoom, Buttons) mit Hit-Test; oben: rein informativ, Tipp geht an die AR-Szene.
     private var overlayContent: some View {
-        Color.clear
-            .contentShape(Rectangle())
-            .allowsHitTesting(false)
-            .overlay(alignment: .top) { topOverlay }
-            .overlay(alignment: .bottom) { bottomOverlay }
+        ZStack {
+            Color.clear
+                .contentShape(Rectangle())
+                .allowsHitTesting(false)
+                .overlay(alignment: .top) { topOverlay }
+            VStack {
+                Spacer()
+                    .allowsHitTesting(false)
+                bottomOverlay
+            }
             .zIndex(1)
+        }
+        .zIndex(1)
     }
 
     @ViewBuilder
@@ -155,12 +174,23 @@ struct ARMeasureView: View {
                     .background(.red.opacity(0.8))
                     .clipShape(RoundedRectangle(cornerRadius: 8))
             }
-            if pointACounted && distanceMeters == nil {
-                Text("Tippe für Endpunkt")
-                    .font(.headline)
+            if showLiveMeasureHint {
+                Text(
+                    placePointsAtScreenCenter
+                        ? (isPolylineMode
+                            ? "Fadenkreuz anvisieren – tippen zum Setzen des nächsten Punkts (Position = Mitte)."
+                            : "Fadenkreuz anvisieren – tippen für B (Position = Mitte).")
+                        : (isPolylineMode
+                            ? "Fläche antippen, um den nächsten Punkt zu setzen."
+                            : "Fläche antippen: A, erneut tippen: B.")
+                )
+                    .font(.caption)
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(.white)
                     .padding(8)
-                    .background(.ultraThinMaterial)
+                    .background(.black.opacity(0.55))
                     .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .padding(.horizontal, 20)
             }
             if let d = distanceMeters {
                 Text(String(format: "%.2f m", d))
@@ -181,16 +211,35 @@ struct ARMeasureView: View {
     private var bottomOverlay: some View {
         VStack(spacing: 12) {
             if !pointACounted && polylinePointCount == 0 && distanceMeters == nil {
-                Picker("Modus", selection: $isPolylineMode) {
-                    Text("Einzelstrecke").tag(false)
-                    Text("Polylinie").tag(true)
+                VStack(spacing: 6) {
+                    Picker("Modus", selection: $isPolylineMode) {
+                        Text("Einzelstrecke").tag(false)
+                        Text("Polylinie").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                    .padding(.horizontal, 40)
+                    Text(isPolylineMode ? "Polylinie: mehrere Eckpunkte (A–B–C…), eine Gesamtmessung." : "Einzelstrecke: wie Maßband – zwei Punkte A und B.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 24)
                 }
-                .pickerStyle(.segmented)
-                .padding(.horizontal, 40)
             }
+            Toggle(isOn: $placePointsAtScreenCenter) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Punkte am Fadenkreuz (Mitte)")
+                        .font(.caption)
+                    Text(placePointsAtScreenCenter ? "Tap bestätigt die Mitte" : "Tap = Punkt an der getippten Stelle")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .tint(.cyan)
+            .padding(.horizontal, 28)
             zoomButtons
             actionButtons
         }
+        .allowsHitTesting(true)
         .padding(.bottom, 40)
     }
 
@@ -364,6 +413,9 @@ struct ARMeasureSceneView: UIViewRepresentable {
     var projectId: UUID
     /// Wird aufgerufen bei Änderung des AR-Tracking-Status („normal“, „limited“, „notAvailable“).
     var onTrackingStateChange: ((String) -> Void)?
+    @Binding var showLiveMeasureHint: Bool
+    /// Messpunkte an Bildschirmmitte statt Tap-Position (wie System-Maßband).
+    var placePointsAtScreenCenter: Bool
 
     func makeUIView(context: Context) -> UIView {
         let container = UIView(frame: .zero)
@@ -375,11 +427,16 @@ struct ARMeasureSceneView: UIViewRepresentable {
         sceneView.autoenablesDefaultLighting = true
         sceneView.antialiasingMode = .multisampling4X
 
-        // Reine AR-Messung: nur Plane-Tracking + Raycast, kein LiDAR/Mesh (3D-Scan ausgeklammert).
+        // Wie iPhone-Maßband: LiDAR-Mesh (falls verfügbar) für stabileres Andocken an reale Oberflächen.
         let config = ARWorldTrackingConfiguration()
         config.worldAlignment = .gravity
         config.planeDetection = [.horizontal, .vertical]
         config.environmentTexturing = .automatic
+        if ARWorldTrackingConfiguration.supportsSceneReconstruction(.meshWithClassification) {
+            config.sceneReconstruction = .meshWithClassification
+        } else if ARWorldTrackingConfiguration.supportsSceneReconstruction(.mesh) {
+            config.sceneReconstruction = .mesh
+        }
         sceneView.session.run(config)
 
         container.addSubview(sceneView)
@@ -395,6 +452,8 @@ struct ARMeasureSceneView: UIViewRepresentable {
         context.coordinator.storage = storage
         context.coordinator.projectId = projectId
         context.coordinator.onTrackingStateChange = onTrackingStateChange
+        context.coordinator.showLiveMeasureHintBinding = $showLiveMeasureHint
+        context.coordinator.distanceMetersBinding = $distanceMeters
         return container
     }
 
@@ -403,6 +462,8 @@ struct ARMeasureSceneView: UIViewRepresentable {
         context.coordinator.storage = storage
         context.coordinator.projectId = projectId
         context.coordinator.onTrackingStateChange = onTrackingStateChange
+        context.coordinator.showLiveMeasureHintBinding = $showLiveMeasureHint
+        context.coordinator.distanceMetersBinding = $distanceMeters
         // Zoom: nur per Transform anwenden (Frame bleibt stabil -> kein Zittern).
         if let sceneView = context.coordinator.sceneView {
             let z = max(1.0, min(zoomFactor, 2.0))
@@ -482,6 +543,15 @@ struct ARMeasureSceneView: UIViewRepresentable {
         var segmentAnchors: [ARAnchor] = []
         var lastSegmentAnchorDistanceM: Float = 0
         var distanceKalman: KalmanFilter?
+        /// Glättung der Live-Vorschau-Strecke (Fadenkreuz → Oberfläche), getrennt von der finalen A–B-Messung.
+        var previewKalman: KalmanFilter?
+        var previewLineNode: SCNNode?
+        var showLiveMeasureHintBinding: Binding<Bool>?
+        var distanceMetersBinding: Binding<Double?>?
+        let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+        var lastPreviewFilteredForHaptic: Float?
+        var stabilityJitterBuffer: [Float] = []
+        var didFireStabilityHapticThisPhase = false
         var onTrackingStateChange: ((String) -> Void)?
         var lastReportedTrackingState: String = ""
 
@@ -513,38 +583,200 @@ struct ARMeasureSceneView: UIViewRepresentable {
                     self?.onTrackingStateChange?(stateStr)
                 }
             }
+            // Live-Vorschau wie Maßband: Strecke vom letzten Punkt zum Fadenkreuz (Bildschirmmitte).
+            if frameCount % 2 == 0 {
+                DispatchQueue.main.async { [weak self] in
+                    self?.updateLivePreviewFromScreenCenter()
+                }
+            }
+        }
+
+        /// Entfernt die Vorschau-Linie. Bei `clearDistanceForLostRaycast` (kein Treffer unter dem Fadenkreuz) Distanz zurücksetzen.
+        private func removeLivePreviewLine(clearDistanceForLostRaycast: Bool = false) {
+            previewLineNode?.removeFromParentNode()
+            previewLineNode = nil
+            previewKalman = nil
+            resetStabilityHapticState()
+            showLiveMeasureHintBinding?.wrappedValue = false
+            guard clearDistanceForLostRaycast else { return }
+            if parent.isPolylineMode {
+                var total: Float = 0
+                if polyPoints.count >= 2 {
+                    for i in 1..<polyPoints.count {
+                        total += simd_distance(polyPoints[i - 1], polyPoints[i])
+                    }
+                }
+                distanceMetersBinding?.wrappedValue = polyPoints.count < 2 ? nil : Double(total)
+            } else if pointA != nil, pointB == nil {
+                distanceMetersBinding?.wrappedValue = nil
+            }
+        }
+
+        /// Dünne gestrichelte 3D-Linie; Dash-Längen in Metern (skalieren mit Segmentlänge für lange Strecken).
+        private func addDashedCylinderSegments(
+            from start: simd_float3,
+            to end: simd_float3,
+            in parent: SCNNode,
+            color: UIColor,
+            radius: CGFloat,
+            dashLength: Float,
+            gapLength: Float
+        ) {
+            let vec = end - start
+            let totalLen = simd_length(vec)
+            guard totalLen > 0.001 else { return }
+            let dir = vec / totalLen
+            let step = dashLength + gapLength
+            var t: Float = 0
+            while t < totalLen {
+                let tEnd = min(t + dashLength, totalLen)
+                let a = start + dir * t
+                let b = start + dir * tEnd
+                let segLen = simd_length(b - a)
+                guard segLen > 0.001 else { t += step; continue }
+                let cylinder = SCNCylinder(radius: radius, height: CGFloat(segLen))
+                let mat = SCNMaterial()
+                mat.diffuse.contents = color
+                mat.lightingModel = .constant
+                mat.isDoubleSided = true
+                cylinder.materials = [mat]
+                let node = SCNNode(geometry: cylinder)
+                node.simdPosition = (a + b) * 0.5
+                node.simdOrientation = simd_quatf(from: simd_make_float3(0, 1, 0), to: dir)
+                parent.addChildNode(node)
+                t += step
+            }
+        }
+
+        /// Sichtbare Mitte des AR-Feldes → Punkt in `sceneView`-Koordinaten (wichtig bei Zoom-Transform am SceneView).
+        private func crosshairRaycastPoint(in view: ARSCNView) -> CGPoint {
+            guard let container = containerView else {
+                return CGPoint(x: view.bounds.midX, y: view.bounds.midY)
+            }
+            let centerInContainer = CGPoint(x: container.bounds.midX, y: container.bounds.midY)
+            return view.convert(centerInContainer, from: container)
+        }
+
+        /// Raycast aus Bildschirmmitte + Linie zum letzten Messpunkt; Distanz geglättet (Kalman).
+        private func updateLivePreviewFromScreenCenter() {
+            guard let view = sceneView else { return }
+            let center = crosshairRaycastPoint(in: view)
+
+            let start: simd_float3?
+            if parent.isPolylineMode {
+                guard !polyPoints.isEmpty else {
+                    removeLivePreviewLine()
+                    return
+                }
+                start = polyPoints.last
+            } else {
+                guard let a = pointA, pointB == nil else {
+                    removeLivePreviewLine()
+                    return
+                }
+                start = a
+            }
+
+            guard let s = start, let (_, endPos) = raycastResult(view: view, at: center) else {
+                removeLivePreviewLine(clearDistanceForLostRaycast: true)
+                return
+            }
+
+            showLiveMeasureHintBinding?.wrappedValue = true
+
+            let rawSeg = simd_distance(s, endPos)
+            let filtered: Float
+            if var k = previewKalman {
+                filtered = k.update(measurement: rawSeg)
+                previewKalman = k
+            } else {
+                var k = KalmanFilter(initialValue: rawSeg, processNoise: 0.02, measurementNoise: 0.08)
+                previewKalman = k
+                filtered = rawSeg
+            }
+
+            updatePreviewLineNode(from: s, to: endPos, in: view)
+
+            maybeTriggerStabilityHaptic(filtered: filtered)
+
+            if parent.isPolylineMode {
+                var total: Float = 0
+                if polyPoints.count >= 2 {
+                    for i in 1..<polyPoints.count {
+                        total += simd_distance(polyPoints[i - 1], polyPoints[i])
+                    }
+                }
+                total += filtered
+                distanceMetersBinding?.wrappedValue = Double(total)
+            } else {
+                distanceMetersBinding?.wrappedValue = Double(filtered)
+            }
+        }
+
+        /// Vorschau: dünn, gestrichelt, Strichlänge wächst mit Gesamtlänge (bei Fernvermessung besser lesbar).
+        private func updatePreviewLineNode(from start: simd_float3, to end: simd_float3, in view: ARSCNView) {
+            previewLineNode?.removeFromParentNode()
+            let vec = end - start
+            let totalLen = simd_length(vec)
+            guard totalLen > 0.001 else { return }
+            let container = SCNNode()
+            container.name = "previewDashedLine"
+            let dash = min(0.28, max(0.05, totalLen * 0.05))
+            let gap = dash * 0.7
+            addDashedCylinderSegments(
+                from: start,
+                to: end,
+                in: container,
+                color: UIColor.systemCyan.withAlphaComponent(0.82),
+                radius: 0.004,
+                dashLength: dash,
+                gapLength: gap
+            )
+            previewLineNode = container
+            view.scene.rootNode.addChildNode(container)
+        }
+
+        /// Leichtes Haptik-Feedback, wenn die Vorschau-Distanz kurz „ruhig“ bleibt (wenig Jitter).
+        private func maybeTriggerStabilityHaptic(filtered: Float) {
+            if let prev = lastPreviewFilteredForHaptic {
+                let jitter = abs(filtered - prev)
+                stabilityJitterBuffer.append(jitter)
+                if stabilityJitterBuffer.count > 12 {
+                    stabilityJitterBuffer.removeFirst()
+                }
+                if jitter > 0.04 {
+                    didFireStabilityHapticThisPhase = false
+                    stabilityJitterBuffer.removeAll()
+                }
+                if stabilityJitterBuffer.count >= 8, !didFireStabilityHapticThisPhase {
+                    let avg = stabilityJitterBuffer.reduce(0, +) / Float(stabilityJitterBuffer.count)
+                    if avg < 0.005 {
+                        impactFeedback.prepare()
+                        impactFeedback.impactOccurred(intensity: 0.85)
+                        didFireStabilityHapticThisPhase = true
+                    }
+                }
+            }
+            lastPreviewFilteredForHaptic = filtered
+        }
+
+        private func resetStabilityHapticState() {
+            lastPreviewFilteredForHaptic = nil
+            stabilityJitterBuffer.removeAll()
+            didFireStabilityHapticThisPhase = false
         }
 
         private func updateDashedPathLine() {
             guard let pathNode = pathLineNode, pathPositions.count >= 2 else { return }
             pathNode.childNodes.forEach { $0.removeFromParentNode() }
-            let dashLength: Float = 0.08
-            let gapLength: Float = 0.05
-            let step = dashLength + gapLength
-            let radius: CGFloat = 0.012
             for i in 0 ..< (pathPositions.count - 1) {
                 let a = pathPositions[i]
                 let b = pathPositions[i + 1]
-                let seg = b - a
-                let len = simd_length(seg)
+                let len = simd_length(b - a)
                 guard len > 0.001 else { continue }
-                let dir = seg / len
-                var t: Float = 0
-                while t < len {
-                    let tEnd = min(t + dashLength, len)
-                    let start = a + dir * t
-                    let end = a + dir * tEnd
-                    let segLen = simd_length(end - start)
-                    guard segLen > 0.001 else { t += step; continue }
-                    let cylinder = SCNCylinder(radius: radius, height: CGFloat(segLen))
-                    cylinder.firstMaterial?.diffuse.contents = UIColor.systemOrange
-                    cylinder.firstMaterial?.lightingModel = .constant
-                    let node = SCNNode(geometry: cylinder)
-                    node.simdPosition = (start + end) * 0.5
-                    node.simdOrientation = simd_quatf(from: simd_make_float3(0, 1, 0), to: simd_normalize(end - start))
-                    pathNode.addChildNode(node)
-                    t += step
-                }
+                let dash = min(0.3, max(0.06, len * 0.048))
+                let gap = dash * 0.72
+                addDashedCylinderSegments(from: a, to: b, in: pathNode, color: UIColor.systemOrange, radius: 0.006, dashLength: dash, gapLength: gap)
             }
         }
 
@@ -552,10 +784,16 @@ struct ARMeasureSceneView: UIViewRepresentable {
             guard let container = containerView, let view = sceneView else { return }
             let locInContainer = gesture.location(in: container)
             let locInScene = CGPoint(x: locInContainer.x - view.frame.origin.x, y: locInContainer.y - view.frame.origin.y)
-            if parent.isPolylineMode {
-                addPolyPoint(view: view, at: locInScene)
+            let effective: CGPoint
+            if parent.placePointsAtScreenCenter {
+                effective = crosshairRaycastPoint(in: view)
             } else {
-                trySetPoint(view: view, at: locInScene)
+                effective = locInScene
+            }
+            if parent.isPolylineMode {
+                addPolyPoint(view: view, at: effective)
+            } else {
+                trySetPoint(view: view, at: effective)
             }
         }
 
@@ -583,6 +821,7 @@ struct ARMeasureSceneView: UIViewRepresentable {
         }
 
         private func addPolyPoint(view: ARSCNView, at point: CGPoint) {
+            removeLivePreviewLine()
             guard let (first, pos) = raycastResult(view: view, at: point) else {
                 DispatchQueue.main.async { self.parent.raycastFailed = true }
                 return
@@ -628,7 +867,7 @@ struct ARMeasureSceneView: UIViewRepresentable {
                 lastSegmentAnchorDistanceM = (totalM / 20).rounded(.down) * 20
             }
             DispatchQueue.main.async {
-                self.parent.distanceMeters = Double(total)
+                self.distanceMetersBinding?.wrappedValue = Double(total)
                 self.parent.onPolyPointAdded()
                 self.parent.polylinePointCount = self.polyPoints.count
             }
@@ -636,16 +875,15 @@ struct ARMeasureSceneView: UIViewRepresentable {
 
         private func addLineSegment(from start: simd_float3, to end: simd_float3, in view: ARSCNView) {
             let vec = end - start
-            let length = simd_length(vec)
-            guard length > 0.001 else { return }
-            let cylinder = SCNCylinder(radius: 0.015, height: CGFloat(length))
-            cylinder.firstMaterial?.diffuse.contents = UIColor.systemYellow
-            let node = SCNNode(geometry: cylinder)
-            node.simdPosition = (start + end) * 0.5
-            let direction = vec / length
-            node.simdOrientation = simd_quatf(from: simd_make_float3(0, 1, 0), to: direction)
-            view.scene.rootNode.addChildNode(node)
-            polyLineNodes.append(node)
+            let totalLen = simd_length(vec)
+            guard totalLen > 0.001 else { return }
+            let container = SCNNode()
+            container.name = "polyDashedSegment"
+            let dash = min(0.32, max(0.08, totalLen * 0.045))
+            let gap = dash * 0.72
+            addDashedCylinderSegments(from: start, to: end, in: container, color: UIColor.systemYellow, radius: 0.006, dashLength: dash, gapLength: gap)
+            view.scene.rootNode.addChildNode(container)
+            polyLineNodes.append(container)
         }
 
         private func setPointA(view: ARSCNView, at point: CGPoint) {
@@ -686,6 +924,7 @@ struct ARMeasureSceneView: UIViewRepresentable {
         }
 
         private func setPointB(view: ARSCNView, at point: CGPoint) {
+            removeLivePreviewLine()
             guard let (first, pos) = raycastResult(view: view, at: point) else {
                 DispatchQueue.main.async { self.parent.raycastFailed = true }
                 return
@@ -725,23 +964,22 @@ struct ARMeasureSceneView: UIViewRepresentable {
                         self.distanceKalman = k
                         filtered = Double(raw)
                     }
-                    self.parent.distanceMeters = filtered
+                    self.distanceMetersBinding?.wrappedValue = filtered
                 }
             }
         }
 
         private func addLine(from start: simd_float3, to end: simd_float3, in view: ARSCNView) {
             let vec = end - start
-            let length = simd_length(vec)
-            guard length > 0.001 else { return }
-            let cylinder = SCNCylinder(radius: 0.015, height: CGFloat(length))
-            cylinder.firstMaterial?.diffuse.contents = UIColor.systemYellow
-            let node = SCNNode(geometry: cylinder)
-            node.simdPosition = (start + end) * 0.5
-            let direction = vec / length
-            node.simdOrientation = simd_quatf(from: simd_make_float3(0, 1, 0), to: direction)
-            view.scene.rootNode.addChildNode(node)
-            lineNode = node
+            let totalLen = simd_length(vec)
+            guard totalLen > 0.001 else { return }
+            let container = SCNNode()
+            container.name = "abDashedLine"
+            let dash = min(0.32, max(0.08, totalLen * 0.045))
+            let gap = dash * 0.72
+            addDashedCylinderSegments(from: start, to: end, in: container, color: UIColor.systemYellow, radius: 0.006, dashLength: dash, gapLength: gap)
+            view.scene.rootNode.addChildNode(container)
+            lineNode = container
         }
         
         private func makeBillboardLabel(text: String) -> SCNNode {
@@ -780,6 +1018,7 @@ struct ARMeasureSceneView: UIViewRepresentable {
         }
 
         func clearMeasurementNodes() {
+            removeLivePreviewLine()
             distanceKalman = nil
             lastSegmentAnchorDistanceM = 0
             if let session = sceneView?.session {
@@ -821,6 +1060,7 @@ struct ARMeasureSceneView: UIViewRepresentable {
                 polyLineNodes.last?.removeFromParentNode()
                 polyLineNodes.removeLast()
                 polyPoints.removeLast()
+                removeLivePreviewLine()
                 DispatchQueue.main.async {
                     self.parent.onPolySegmentRemoved()
                 }
@@ -829,7 +1069,7 @@ struct ARMeasureSceneView: UIViewRepresentable {
                     total += simd_distance(polyPoints[i - 1], polyPoints[i])
                 }
                 DispatchQueue.main.async {
-                    self.parent.distanceMeters = self.polyPoints.isEmpty ? nil : Double(total)
+                    self.distanceMetersBinding?.wrappedValue = self.polyPoints.isEmpty ? nil : Double(total)
                     self.parent.polylinePointCount = self.polyPoints.count
                 }
             } else if pointBNode?.parent != nil {
@@ -843,7 +1083,8 @@ struct ARMeasureSceneView: UIViewRepresentable {
                 lineNode = nil
                 labelBNode?.removeFromParentNode()
                 labelBNode = nil
-                self.parent.distanceMeters = nil
+                removeLivePreviewLine()
+                self.distanceMetersBinding?.wrappedValue = nil
                 self.parent.raycastFailed = false
             } else if pointANode?.parent != nil {
                 if let lastAnchor = measurementAnchors.popLast() {
@@ -862,6 +1103,62 @@ struct ARMeasureSceneView: UIViewRepresentable {
         func session(_ session: ARSession, didFailWithError error: Error) {}
         func sessionWasInterrupted(_ session: ARSession) {}
         func sessionInterruptionEnded(_ session: ARSession) {}
+    }
+}
+
+// MARK: - Fadenkreuz (lange Strecken)
+
+/// Gestrichelte Linien bis zum Bildrand, freier Mittelbereich – Orientierung für Fernvermessung, ohne die Treffmitte zu verdecken.
+private struct ARMeasurementReticleOverlay: View {
+    /// Halber Abstand: freier Kreis um den Raycast-Punkt (Mitte).
+    private let centerGap: CGFloat = 36
+    private let lineWidth: CGFloat = 1.1
+    private let dashPattern: [CGFloat] = [16, 10]
+
+    var body: some View {
+        GeometryReader { geo in
+            let w = geo.size.width
+            let h = geo.size.height
+            let cx = w * 0.5
+            let cy = h * 0.5
+            let g = centerGap * 0.5
+            let style = StrokeStyle(lineWidth: lineWidth, lineCap: .round, dash: dashPattern)
+
+            Path { p in
+                p.move(to: CGPoint(x: 0, y: cy))
+                p.addLine(to: CGPoint(x: cx - g, y: cy))
+            }
+            .stroke(Color.white.opacity(0.74), style: style)
+            .shadow(color: .black.opacity(0.45), radius: 0.8, x: 0, y: 0)
+
+            Path { p in
+                p.move(to: CGPoint(x: cx + g, y: cy))
+                p.addLine(to: CGPoint(x: w, y: cy))
+            }
+            .stroke(Color.white.opacity(0.74), style: style)
+            .shadow(color: .black.opacity(0.45), radius: 0.8, x: 0, y: 0)
+
+            Path { p in
+                p.move(to: CGPoint(x: cx, y: 0))
+                p.addLine(to: CGPoint(x: cx, y: cy - g))
+            }
+            .stroke(Color.white.opacity(0.74), style: style)
+            .shadow(color: .black.opacity(0.45), radius: 0.8, x: 0, y: 0)
+
+            Path { p in
+                p.move(to: CGPoint(x: cx, y: cy + g))
+                p.addLine(to: CGPoint(x: cx, y: h))
+            }
+            .stroke(Color.white.opacity(0.74), style: style)
+            .shadow(color: .black.opacity(0.45), radius: 0.8, x: 0, y: 0)
+
+            Circle()
+                .strokeBorder(Color.white.opacity(0.9), lineWidth: 1)
+                .frame(width: 12, height: 12)
+                .position(x: cx, y: cy)
+                .shadow(color: .black.opacity(0.5), radius: 0.6, x: 0, y: 0)
+        }
+        .allowsHitTesting(false)
     }
 }
 
