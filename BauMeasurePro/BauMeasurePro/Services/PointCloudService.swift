@@ -11,6 +11,7 @@ struct ColoredPoint {
     var r: UInt8
     var g: UInt8
     var b: UInt8
+    var isCableCandidate: Bool
 }
 
 /// Sammelt Tiefenbild + Kamerabild zu einer RGB-Punktwolke (ScanAce-ähnlich). Thread-sicher.
@@ -116,12 +117,14 @@ final class PointCloudService {
                 let clampedX = min(max(0, sx), camWidth - 1)
                 let clampedY = min(max(0, sy), camHeight - 1)
                 let (r, g, b) = sampleRGB(from: camImage, x: clampedX, y: clampedY)
+                let isCable = isTelekomCableColor(r: r, g: g, b: b)
 
                 added.append((key, ColoredPoint(
                     x: worldPt.x,
                     y: worldPt.y,
                     z: worldPt.z,
-                    r: r, g: g, b: b
+                    r: r, g: g, b: b,
+                    isCableCandidate: isCable
                 )))
             }
         }
@@ -199,6 +202,44 @@ final class PointCloudService {
         )
     }
 
+    /// Erkennung für Telekom-Faser-Kabel (typisch Magenta oder Orange). Arbeitet in HSV und ist robust gegen Helligkeit.
+    private func isTelekomCableColor(r: UInt8, g: UInt8, b: UInt8) -> Bool {
+        let (h, s, v) = rgbToHSV(r: r, g: g, b: b)
+        // Mindest-Sättigung/Helligkeit: sonst ist es meist Erde/Schatten.
+        guard s >= 0.45, v >= 0.20 else { return false }
+
+        // Orange: ca. 18°–45°
+        let isOrange = (h >= 18 && h <= 45) && s >= 0.55 && v >= 0.25
+        // Magenta: ca. 295°–345° (plus etwas um 0° herum, je nach Weißabgleich).
+        let isMagenta = (h >= 295 && h <= 345 && s >= 0.50 && v >= 0.20)
+            || (h >= 0 && h <= 10 && s >= 0.55 && v >= 0.20)
+        return isOrange || isMagenta
+    }
+
+    /// RGB(0-255) -> HSV(H 0-360, S 0-1, V 0-1)
+    private func rgbToHSV(r: UInt8, g: UInt8, b: UInt8) -> (h: Double, s: Double, v: Double) {
+        let rf = Double(r) / 255.0
+        let gf = Double(g) / 255.0
+        let bf = Double(b) / 255.0
+        let maxV = max(rf, max(gf, bf))
+        let minV = min(rf, min(gf, bf))
+        let delta = maxV - minV
+        let v = maxV
+        let s = maxV == 0 ? 0 : (delta / maxV)
+        var h: Double = 0
+        if delta > 0 {
+            if maxV == rf {
+                h = 60.0 * (((gf - bf) / delta).truncatingRemainder(dividingBy: 6.0))
+            } else if maxV == gf {
+                h = 60.0 * (((bf - rf) / delta) + 2.0)
+            } else {
+                h = 60.0 * (((rf - gf) / delta) + 4.0)
+            }
+        }
+        if h < 0 { h += 360.0 }
+        return (h, s, v)
+    }
+
     /// Reduziert die Punktmenge in Blöcken, um Speicher stabil zu halten.
     private func trimIfNeededLocked() {
         guard voxelToPoint.count > maxStoredPoints else { return }
@@ -216,6 +257,13 @@ final class PointCloudService {
         lock.lock()
         defer { lock.unlock() }
         return Array(voxelToPoint.values)
+    }
+
+    /// Kopiert nur Punkte, die als Kabel-Kandidaten markiert wurden.
+    func copyCableCandidatePoints() -> [ColoredPoint] {
+        lock.lock()
+        defer { lock.unlock() }
+        return voxelToPoint.values.filter { $0.isCableCandidate }
     }
 
     /// Erstellt eine SCNGeometry für die Punktwolke (für Anzeige). Optional: max Punkte begrenzen.
@@ -267,6 +315,73 @@ final class PointCloudService {
             bytesPerIndex: MemoryLayout<Int32>.size
         )
         let s = max(0.5, min(8.0, pointSize))
+        element.pointSize = s
+        element.minimumPointScreenSpaceRadius = s
+        element.maximumPointScreenSpaceRadius = s
+
+        let geometry = SCNGeometry(sources: [vertexSource, colorSource], elements: [element])
+        let mat = geometry.firstMaterial ?? SCNMaterial()
+        mat.diffuse.contents = UIColor.white
+        mat.lightingModel = .constant
+        mat.isDoubleSided = true
+        geometry.materials = [mat]
+        return geometry
+    }
+
+    /// Geometrie für Kabel-Overlay: Punkte werden in einer festen, sehr sichtbaren Highlight-Farbe gerendert.
+    func makeCableHighlightGeometry(
+        maxPoints: Int? = nil,
+        pointSize: CGFloat = 2.2,
+        highlightColor: (UInt8, UInt8, UInt8) = (0, 255, 255)
+    ) -> SCNGeometry? {
+        var points = copyCableCandidatePoints()
+        if let max = maxPoints, points.count > max {
+            points = Array(points.shuffled().prefix(max))
+        }
+        guard !points.isEmpty else { return nil }
+
+        var vertices: [SCNVector3] = points.map { SCNVector3($0.x, $0.y, $0.z) }
+        var colors: [UInt8] = []
+        colors.reserveCapacity(points.count * 4)
+        for _ in points {
+            colors.append(highlightColor.0)
+            colors.append(highlightColor.1)
+            colors.append(highlightColor.2)
+            colors.append(255)
+        }
+
+        let vertexData = Data(bytes: &vertices, count: vertices.count * MemoryLayout<SCNVector3>.size)
+        let colorData = Data(colors)
+
+        let vertexSource = SCNGeometrySource(
+            data: vertexData,
+            semantic: .vertex,
+            vectorCount: points.count,
+            usesFloatComponents: true,
+            componentsPerVector: 3,
+            bytesPerComponent: MemoryLayout<Float>.size,
+            dataOffset: 0,
+            dataStride: MemoryLayout<SCNVector3>.size
+        )
+        let colorSource = SCNGeometrySource(
+            data: colorData,
+            semantic: .color,
+            vectorCount: points.count,
+            usesFloatComponents: false,
+            componentsPerVector: 4,
+            bytesPerComponent: 1,
+            dataOffset: 0,
+            dataStride: 4
+        )
+        var indices = [Int32](repeating: 0, count: points.count)
+        for i in 0..<points.count { indices[i] = Int32(i) }
+        let element = SCNGeometryElement(
+            data: Data(bytes: indices, count: indices.count * MemoryLayout<Int32>.size),
+            primitiveType: .point,
+            primitiveCount: points.count,
+            bytesPerIndex: MemoryLayout<Int32>.size
+        )
+        let s = max(0.8, min(10.0, pointSize))
         element.pointSize = s
         element.minimumPointScreenSpaceRadius = s
         element.maximumPointScreenSpaceRadius = s

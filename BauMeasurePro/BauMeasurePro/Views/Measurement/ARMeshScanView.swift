@@ -62,6 +62,8 @@ struct ARMeshScanView: View {
     @State private var liveQualityHint: String = "Initialisiere Scan..."
     @AppStorage("pointCloudPointSize") private var pointCloudPointSize: Double = 1.0
     @AppStorage("pointCloudDensity") private var pointCloudDensity: Double = 0.85
+    @AppStorage("pointCloudCableHighlightEnabled") private var cableHighlightEnabled: Bool = true
+    @AppStorage("pointCloudCableHighlightStrength") private var cableHighlightStrength: Double = 0.75
 
     private let storage = StorageService()
 
@@ -89,6 +91,8 @@ struct ARMeshScanView: View {
                 qualityHint: $liveQualityHint,
                 pointCloudPointSize: pointCloudPointSize,
                 pointCloudDensity: pointCloudDensity,
+                cableHighlightEnabled: cableHighlightEnabled,
+                cableHighlightStrength: cableHighlightStrength,
                 scanId: scanId,
                 storage: storage,
                 getLocation: {
@@ -222,6 +226,21 @@ struct ARMeshScanView: View {
                         .font(.caption2.monospacedDigit())
                         .foregroundStyle(.white.opacity(0.9))
                 }
+                Toggle("Leitungen hervorheben", isOn: $cableHighlightEnabled)
+                    .font(.caption2)
+                    .foregroundStyle(.white.opacity(0.9))
+                    .tint(.cyan)
+                if cableHighlightEnabled {
+                    HStack {
+                        Text("Leitungs-Fokus")
+                            .font(.caption2)
+                            .foregroundStyle(.white.opacity(0.8))
+                        Slider(value: $cableHighlightStrength, in: 0.2...1.0, step: 0.05)
+                        Text("\(Int(cableHighlightStrength * 100))%")
+                            .font(.caption2.monospacedDigit())
+                            .foregroundStyle(.white.opacity(0.9))
+                    }
+                }
             }
             Text(detailModeDescription)
                 .font(.caption2)
@@ -321,6 +340,8 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
     @Binding var qualityHint: String
     var pointCloudPointSize: Double
     var pointCloudDensity: Double
+    var cableHighlightEnabled: Bool
+    var cableHighlightStrength: Double
     var scanId: UUID
     var storage: StorageService
     var getLocation: () -> (Double, Double)?
@@ -380,6 +401,10 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
         pointCloudNode.name = "PointCloudNode"
         sceneView.scene.rootNode.addChildNode(pointCloudNode)
         context.coordinator.pointCloudNode = pointCloudNode
+        let cableNode = SCNNode()
+        cableNode.name = "CableHighlightNode"
+        sceneView.scene.rootNode.addChildNode(cableNode)
+        context.coordinator.cableHighlightNode = cableNode
         let scanPathNode = SCNNode()
         scanPathNode.name = "ScanPathNode"
         sceneView.scene.rootNode.addChildNode(scanPathNode)
@@ -402,6 +427,8 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
         context.coordinator.processingOptions = processingOptions
         context.coordinator.pointCloudPointSize = pointCloudPointSize
         context.coordinator.pointCloudDensity = pointCloudDensity
+        context.coordinator.cableHighlightEnabled = cableHighlightEnabled
+        context.coordinator.cableHighlightStrength = cableHighlightStrength
         context.coordinator.updatePointCloudSamplingConfiguration()
         if requestExport {
             context.coordinator.performExport()
@@ -432,6 +459,7 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
         var qualityHintBinding: Binding<String>?
         var knownMeshNodes: [UUID: SCNNode] = [:]
         var pointCloudNode: SCNNode?
+        var cableHighlightNode: SCNNode?
         var scanPathRootNode: SCNNode?
         var pointCloudService: PointCloudService?
         var scanProcedure: ScanProcedure = .pointCloud
@@ -470,6 +498,9 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
         var pointCloudDensity: Double = 0.85
         private var pointCloudPreviewMaxPoints: Int = 8_000
         private var isPointCloudFrameProcessing = false
+        var cableHighlightEnabled: Bool = true
+        var cableHighlightStrength: Double = 0.75
+        private var cablePreviewMaxPoints: Int = 6_000
 
         private var lastGeometryUpdateTime: CFTimeInterval = 0
 
@@ -515,16 +546,32 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
             guard count > 0, (now - lastGeometryUpdateTime) > 1.2 else { return }
             lastGeometryUpdateTime = now
             let node = pointCloudNode
-            DispatchQueue.global(qos: .userInitiated).async { [weak service, weak node, weak self] in
+            let cableNode = cableHighlightNode
+            let highlightOn = cableHighlightEnabled
+            DispatchQueue.global(qos: .userInitiated).async { [weak service, weak node, weak cableNode, weak self] in
                 // Live-Punktwolke dynamisch je nach Dichteprofil begrenzen.
                 guard let service = service, let node = node,
                       let geometry = service.makeSceneKitGeometry(
                         maxPoints: self?.pointCloudPreviewMaxPoints ?? 8_000,
                         pointSize: CGFloat(self?.pointCloudPointSize ?? 1.0)
                       ) else { return }
+                let cableGeometry: SCNGeometry? = {
+                    guard highlightOn else { return nil }
+                    let maxPts = self?.cablePreviewMaxPoints ?? 6_000
+                    let size = CGFloat((self?.pointCloudPointSize ?? 1.0) * 1.8 + 0.6)
+                    return service.makeCableHighlightGeometry(
+                        maxPoints: maxPts,
+                        pointSize: size,
+                        highlightColor: (0, 255, 255)
+                    )
+                }()
                 DispatchQueue.main.async {
                     node.geometry = geometry
                     node.position = SCNVector3(0, 0, 0)
+                    if let cableNode = cableNode {
+                        cableNode.geometry = cableGeometry
+                        cableNode.position = SCNVector3(0, 0, 0)
+                    }
                 }
             }
         }
@@ -552,6 +599,8 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
             // Lange Strecken: RAM stabil halten, aber bei hoher Dichte mehr Punkte erlauben.
             service.maxStoredPoints = Int(160_000 + (d * 240_000)) // 208k ... 400k
             pointCloudPreviewMaxPoints = Int(4_000 + (d * 20_000))
+            let focus = max(0.2, min(1.0, cableHighlightStrength))
+            cablePreviewMaxPoints = Int(2_000 + (focus * 14_000))
         }
 
         func session(_ session: ARSession, didAdd anchors: [ARAnchor]) {
