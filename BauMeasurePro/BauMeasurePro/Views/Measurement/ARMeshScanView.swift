@@ -606,7 +606,8 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
                 }
             }
             let now = CACurrentMediaTime()
-            guard count > 0, (now - lastGeometryUpdateTime) > 1.2 else { return }
+            let minUpdateInterval: CFTimeInterval = cableHighlightEnabled ? 0.85 : 1.2
+            guard count > 0, (now - lastGeometryUpdateTime) > minUpdateInterval else { return }
             lastGeometryUpdateTime = now
             let node = pointCloudNode
             let cableNode = cableHighlightNode
@@ -621,19 +622,23 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
                 let cableGeometry: SCNGeometry? = {
                     guard highlightOn else { return nil }
                     let maxPts = self?.cablePreviewMaxPoints ?? 6_000
-                    let size = CGFloat((self?.pointCloudPointSize ?? 1.0) * 1.8 + 0.6)
+                    // Kabel deutlich größer darstellen als Umgebungspunkte.
+                    let size = CGFloat((self?.pointCloudPointSize ?? 1.0) * 3.2 + 1.2)
                     return service.makeCableHighlightGeometry(
                         maxPoints: maxPts,
                         pointSize: size,
-                        highlightColor: (0, 255, 255)
+                        highlightColor: (255, 0, 255)
                     )
                 }()
                 DispatchQueue.main.async {
                     node.geometry = geometry
                     node.position = SCNVector3(0, 0, 0)
+                    // Wenn Kabelpunkte vorhanden sind, Umgebung abdunkeln, damit Magenta „knallt“.
+                    node.opacity = (cableGeometry != nil) ? 0.28 : 1.0
                     if let cableNode = cableNode {
                         cableNode.geometry = cableGeometry
                         cableNode.position = SCNVector3(0, 0, 0)
+                        cableNode.opacity = 1.0
                     }
                 }
             }
