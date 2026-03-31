@@ -89,7 +89,7 @@ private func addCablePathOverlay(to parent: SCNNode, points: [SIMD3<Float>]) {
     guard points.count >= 2 else { return }
     let root = SCNNode()
     root.name = "cablePathOverlay"
-    let color = UIColor.systemMagenta
+    let color = UIColor.magenta
 
     for i in 1..<points.count {
         let a = points[i - 1]
