@@ -230,6 +230,58 @@ class StorageService {
         }
     }
 
+    // MARK: - Kabel-Leitungsweg (Polyline) für 3D-Scans
+
+    struct CablePathPoint: Codable, Equatable {
+        var x: Float
+        var y: Float
+        var z: Float
+    }
+
+    struct CablePath: Codable, Equatable {
+        var points: [CablePathPoint]
+        var createdAt: Date
+    }
+
+    /// Speichert den gezeichneten Leitungsweg als JSON (relativ in Documents, unter 3dscans/).
+    /// Rückgabe ist relativer Pfad (z. B. "3dscans/<id>.cablepath.json") oder nil.
+    func saveCablePath(points: [SIMD3<Float>], scanId: UUID) -> String? {
+        guard let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return nil }
+        let subdir = dir.appendingPathComponent("3dscans", isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(at: subdir, withIntermediateDirectories: true)
+        } catch {
+            return nil
+        }
+        let fileName = "\(scanId.uuidString).cablepath.json"
+        let url = subdir.appendingPathComponent(fileName)
+        let payload = CablePath(
+            points: points.map { CablePathPoint(x: $0.x, y: $0.y, z: $0.z) },
+            createdAt: Date()
+        )
+        do {
+            let data = try JSONEncoder().encode(payload)
+            try data.write(to: url, options: [.atomic])
+            return "3dscans/\(fileName)"
+        } catch {
+            return nil
+        }
+    }
+
+    /// Lädt den Leitungsweg eines Scans, falls vorhanden (ansonsten leeres Array).
+    func loadCablePathPoints(scanId: UUID) -> [SIMD3<Float>] {
+        let rel = "3dscans/\(scanId.uuidString).cablepath.json"
+        let full = fullPath(forStoredPath: rel)
+        guard FileManager.default.fileExists(atPath: full) else { return [] }
+        do {
+            let data = try Data(contentsOf: URL(fileURLWithPath: full))
+            let decoded = try JSONDecoder().decode(CablePath.self, from: data)
+            return decoded.points.map { SIMD3<Float>($0.x, $0.y, $0.z) }
+        } catch {
+            return []
+        }
+    }
+
     /// Speichert ein Zwischen-Segment für lange Mesh-Scans auf Disk.
     /// Rückgabe ist ein relativer Pfad (z. B. "3dscans/segments/<scanId>/segment-3.scn").
     func saveMeshSegmentScene(_ scene: SCNScene, scanId: UUID, segmentIndex: Int) -> String? {

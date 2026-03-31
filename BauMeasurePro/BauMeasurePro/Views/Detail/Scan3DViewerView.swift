@@ -84,6 +84,41 @@ private func addAxisGizmo(to scene: SCNScene) {
     scene.rootNode.addChildNode(axisRoot)
 }
 
+/// Fügt eine magenta Polyline (Kabelweg) als Overlay hinzu.
+private func addCablePathOverlay(to parent: SCNNode, points: [SIMD3<Float>]) {
+    guard points.count >= 2 else { return }
+    let root = SCNNode()
+    root.name = "cablePathOverlay"
+    let color = UIColor.systemMagenta
+
+    for i in 1..<points.count {
+        let a = points[i - 1]
+        let b = points[i]
+        let dir = b - a
+        let length = simd_length(dir)
+        guard length.isFinite, length > 0.001 else { continue }
+        let cylinder = SCNCylinder(radius: 0.012, height: CGFloat(length))
+        cylinder.radialSegmentCount = 10
+        let mat = cylinder.firstMaterial ?? SCNMaterial()
+        mat.diffuse.contents = color
+        mat.emission.contents = color.withAlphaComponent(0.75)
+        mat.lightingModel = .constant
+        cylinder.materials = [mat]
+        let node = SCNNode(geometry: cylinder)
+        node.simdPosition = (a + b) * 0.5
+        let up = simd_float3(0, 1, 0)
+        let nDir = simd_normalize(dir)
+        let axis = simd_cross(up, nDir)
+        let dot = max(-1.0, min(1.0, simd_dot(up, nDir)))
+        let angle = acos(dot)
+        if simd_length(axis) > 0.0001, angle.isFinite {
+            node.simdOrientation = simd_quatf(angle: angle, axis: simd_normalize(axis))
+        }
+        root.addChildNode(node)
+    }
+    parent.addChildNode(root)
+}
+
 /// Platzhalter-Szene: gut sichtbarer orangener Würfel + Kamera.
 private func makePlaceholderScene() -> SCNScene {
     let scene = SCNScene()
@@ -849,6 +884,10 @@ struct Scan3DViewerView: View {
                 setSceneBackground(s)
                 recenterModelInScene(s)
                 addAxisGizmo(to: s)
+                let cablePoints = storage.loadCablePathPoints(scanId: scan.id)
+                if let modelRoot = s.rootNode.childNode(withName: "modelRoot", recursively: true) ?? s.rootNode.childNodes.first {
+                    addCablePathOverlay(to: modelRoot, points: cablePoints)
+                }
                 if s.rootNode.childNode(withName: cameraNodeName, recursively: true) == nil {
                     addDefaultCamera(to: s)
                 }
@@ -857,7 +896,8 @@ struct Scan3DViewerView: View {
                 return makePlaceholderScene()
             }
         case .ply(let vertices, let colors):
-            return buildPointCloudScene(vertices: vertices, colors: colors, displayStyle: displayStyle)
+            let cablePoints = storage.loadCablePathPoints(scanId: scan.id)
+            return buildPointCloudScene(vertices: vertices, colors: colors, displayStyle: displayStyle, cablePathPoints: cablePoints)
         }
     }
 
@@ -922,7 +962,7 @@ struct Scan3DViewerView: View {
     }
 
     /// SCNScene aus Punktwolken-Daten. Jeder Punkt wird als kleines Quad (2 Dreiecke) gezeichnet, damit es sichtbar ist.
-    private func buildPointCloudScene(vertices: [SCNVector3], colors: [UInt8], displayStyle: PointCloudDisplayStyle) -> SCNScene {
+    private func buildPointCloudScene(vertices: [SCNVector3], colors: [UInt8], displayStyle: PointCloudDisplayStyle, cablePathPoints: [SIMD3<Float>]) -> SCNScene {
         guard !vertices.isEmpty, colors.count >= vertices.count * 4 else { return makePlaceholderScene() }
         var useVertices = vertices
         var cx: Float = 0, cy: Float = 0, cz: Float = 0
@@ -940,6 +980,8 @@ struct Scan3DViewerView: View {
             useVertices[i].y -= cy
             useVertices[i].z -= cz
         }
+        // Kabelpfad muss denselben Recenter-Offset bekommen wie die Punktwolke.
+        let shiftedCable = cablePathPoints.map { SIMD3<Float>($0.x - cx, $0.y - cy, $0.z - cz) }
         var minX: Float = .greatestFiniteMagnitude, maxX: Float = -.greatestFiniteMagnitude
         var minY: Float = .greatestFiniteMagnitude, maxY: Float = -.greatestFiniteMagnitude
         var minZ: Float = .greatestFiniteMagnitude, maxZ: Float = -.greatestFiniteMagnitude
@@ -1021,6 +1063,7 @@ struct Scan3DViewerView: View {
         // Orbit-Achse im Mittelpunkt der Punktwolke + kleines Achsensystem anzeigen.
         recenterModelInScene(scene)
         addAxisGizmo(to: scene)
+        addCablePathOverlay(to: modelRoot, points: shiftedCable)
         let cam = SCNNode()
         cam.name = cameraNodeName
         cam.camera = SCNCamera()

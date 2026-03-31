@@ -250,7 +250,7 @@ struct ARMeshScanView: View {
                 Toggle("Leitungsweg zeichnen", isOn: $cablePathEnabled)
                     .font(.caption2)
                     .foregroundStyle(.white.opacity(0.9))
-                    .tint(.yellow)
+                    .tint(.pink)
                 if cablePathEnabled {
                     HStack(spacing: 10) {
                         Button("Undo") { requestCablePathUndo = true }
@@ -683,8 +683,8 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
             guard let root = cablePathRootNode else { return }
             let sphere = SCNSphere(radius: 0.015)
             let mat = sphere.firstMaterial ?? SCNMaterial()
-            mat.diffuse.contents = UIColor.systemYellow
-            mat.emission.contents = UIColor.systemYellow.withAlphaComponent(0.7)
+            mat.diffuse.contents = UIColor.systemMagenta
+            mat.emission.contents = UIColor.systemMagenta.withAlphaComponent(0.75)
             mat.lightingModel = .constant
             sphere.materials = [mat]
             let node = SCNNode(geometry: sphere)
@@ -701,8 +701,8 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
             let cylinder = SCNCylinder(radius: 0.012, height: CGFloat(length))
             cylinder.radialSegmentCount = 10
             let mat = cylinder.firstMaterial ?? SCNMaterial()
-            mat.diffuse.contents = UIColor.systemYellow
-            mat.emission.contents = UIColor.systemYellow.withAlphaComponent(0.7)
+            mat.diffuse.contents = UIColor.systemMagenta
+            mat.emission.contents = UIColor.systemMagenta.withAlphaComponent(0.75)
             mat.lightingModel = .constant
             cylinder.materials = [mat]
             let node = SCNNode(geometry: cylinder)
@@ -935,6 +935,7 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
             if scanProcedure == .pointCloud, let service = pointCloudService, service.pointCount > 0 {
                 let scanIdCopy = scanId
                 let storageCopy = storage
+                let cablePointsCopy = self.cablePathPoints
                 DispatchQueue.global(qos: .userInitiated).async { [weak self] in
                     guard let plyData = service.exportPLY() else {
                         DispatchQueue.main.async {
@@ -944,6 +945,7 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
                         return
                     }
                     let path = storageCopy.savePointCloudPLY(plyData, scanId: scanIdCopy)
+                    _ = storageCopy.saveCablePath(points: cablePointsCopy, scanId: scanIdCopy)
                     DispatchQueue.main.async {
                         self?.isExportInProgress = false
                         done(path, loc?.0, loc?.1, originX, originY, originZ, self?.capturedKeyframes ?? [])
@@ -959,6 +961,7 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
             let storageCopy = storage
             let scanIdCopy = scanId
             let segmentPaths = cachedSegmentPaths
+            let cablePointsCopy = self.cablePathPoints
 
             DispatchQueue.global(qos: .userInitiated).async { [weak self] in
                 autoreleasepool {
@@ -996,6 +999,7 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
                     }
 
                     let path = storageCopy.save3DScene(scene, scanId: scanIdCopy)
+                    _ = storageCopy.saveCablePath(points: cablePointsCopy, scanId: scanIdCopy)
                     DispatchQueue.main.async {
                         self?.isExportInProgress = false
                         storageCopy.clearMeshSegments(scanId: scanIdCopy)
