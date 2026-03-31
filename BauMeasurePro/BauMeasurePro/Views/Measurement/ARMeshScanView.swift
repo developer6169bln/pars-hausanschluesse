@@ -64,6 +64,9 @@ struct ARMeshScanView: View {
     @AppStorage("pointCloudDensity") private var pointCloudDensity: Double = 0.85
     @AppStorage("pointCloudCableHighlightEnabled") private var cableHighlightEnabled: Bool = true
     @AppStorage("pointCloudCableHighlightStrength") private var cableHighlightStrength: Double = 0.75
+    @AppStorage("pointCloudCablePathEnabled") private var cablePathEnabled: Bool = false
+    @State private var requestCablePathUndo: Bool = false
+    @State private var requestCablePathClear: Bool = false
 
     private let storage = StorageService()
 
@@ -93,6 +96,9 @@ struct ARMeshScanView: View {
                 pointCloudDensity: pointCloudDensity,
                 cableHighlightEnabled: cableHighlightEnabled,
                 cableHighlightStrength: cableHighlightStrength,
+                cablePathEnabled: cablePathEnabled,
+                requestCablePathUndo: $requestCablePathUndo,
+                requestCablePathClear: $requestCablePathClear,
                 scanId: scanId,
                 storage: storage,
                 getLocation: {
@@ -241,6 +247,21 @@ struct ARMeshScanView: View {
                             .foregroundStyle(.white.opacity(0.9))
                     }
                 }
+                Toggle("Leitungsweg zeichnen", isOn: $cablePathEnabled)
+                    .font(.caption2)
+                    .foregroundStyle(.white.opacity(0.9))
+                    .tint(.yellow)
+                if cablePathEnabled {
+                    HStack(spacing: 10) {
+                        Button("Undo") { requestCablePathUndo = true }
+                            .buttonStyle(.bordered)
+                            .tint(.white)
+                        Button("Löschen") { requestCablePathClear = true }
+                            .buttonStyle(.borderedProminent)
+                            .tint(.red)
+                    }
+                    .font(.caption2)
+                }
             }
             Text(detailModeDescription)
                 .font(.caption2)
@@ -342,6 +363,9 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
     var pointCloudDensity: Double
     var cableHighlightEnabled: Bool
     var cableHighlightStrength: Double
+    var cablePathEnabled: Bool
+    @Binding var requestCablePathUndo: Bool
+    @Binding var requestCablePathClear: Bool
     var scanId: UUID
     var storage: StorageService
     var getLocation: () -> (Double, Double)?
@@ -395,6 +419,11 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
         context.coordinator.processingOptions = processingOptions
         context.coordinator.pointCloudPointSize = pointCloudPointSize
         context.coordinator.pointCloudDensity = pointCloudDensity
+        context.coordinator.cableHighlightEnabled = cableHighlightEnabled
+        context.coordinator.cableHighlightStrength = cableHighlightStrength
+        context.coordinator.cablePathEnabled = cablePathEnabled
+        context.coordinator.requestCablePathUndoBinding = $requestCablePathUndo
+        context.coordinator.requestCablePathClearBinding = $requestCablePathClear
         context.coordinator.resetCaptureState()
 
         let pointCloudNode = SCNNode()
@@ -405,10 +434,18 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
         cableNode.name = "CableHighlightNode"
         sceneView.scene.rootNode.addChildNode(cableNode)
         context.coordinator.cableHighlightNode = cableNode
+        let cablePathNode = SCNNode()
+        cablePathNode.name = "CablePathNode"
+        sceneView.scene.rootNode.addChildNode(cablePathNode)
+        context.coordinator.cablePathRootNode = cablePathNode
         let scanPathNode = SCNNode()
         scanPathNode.name = "ScanPathNode"
         sceneView.scene.rootNode.addChildNode(scanPathNode)
         context.coordinator.scanPathRootNode = scanPathNode
+
+        let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleTap(_:)))
+        tap.numberOfTapsRequired = 1
+        sceneView.addGestureRecognizer(tap)
 
         if !ARWorldTrackingConfiguration.supportsSceneReconstruction(.mesh) && !ARWorldTrackingConfiguration.supportsSceneReconstruction(.meshWithClassification) {
             DispatchQueue.main.async { supportsMesh = false }
@@ -429,6 +466,15 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
         context.coordinator.pointCloudDensity = pointCloudDensity
         context.coordinator.cableHighlightEnabled = cableHighlightEnabled
         context.coordinator.cableHighlightStrength = cableHighlightStrength
+        context.coordinator.cablePathEnabled = cablePathEnabled
+        if requestCablePathUndo {
+            context.coordinator.undoCablePathPoint()
+            DispatchQueue.main.async { requestCablePathUndo = false }
+        }
+        if requestCablePathClear {
+            context.coordinator.clearCablePath()
+            DispatchQueue.main.async { requestCablePathClear = false }
+        }
         context.coordinator.updatePointCloudSamplingConfiguration()
         if requestExport {
             context.coordinator.performExport()
@@ -457,9 +503,12 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
         var trackingStateBinding: Binding<String>?
         var qualityScoreBinding: Binding<Int>?
         var qualityHintBinding: Binding<String>?
+        var requestCablePathUndoBinding: Binding<Bool>?
+        var requestCablePathClearBinding: Binding<Bool>?
         var knownMeshNodes: [UUID: SCNNode] = [:]
         var pointCloudNode: SCNNode?
         var cableHighlightNode: SCNNode?
+        var cablePathRootNode: SCNNode?
         var scanPathRootNode: SCNNode?
         var pointCloudService: PointCloudService?
         var scanProcedure: ScanProcedure = .pointCloud
@@ -501,6 +550,10 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
         var cableHighlightEnabled: Bool = true
         var cableHighlightStrength: Double = 0.75
         private var cablePreviewMaxPoints: Int = 6_000
+        var cablePathEnabled: Bool = false
+        private var cablePathPoints: [simd_float3] = []
+        private var cablePathSegmentNodes: [SCNNode] = []
+        private var cablePathMarkerNodes: [SCNNode] = []
 
         private var lastGeometryUpdateTime: CFTimeInterval = 0
 
@@ -601,6 +654,89 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
             pointCloudPreviewMaxPoints = Int(4_000 + (d * 20_000))
             let focus = max(0.2, min(1.0, cableHighlightStrength))
             cablePreviewMaxPoints = Int(2_000 + (focus * 14_000))
+        }
+
+        @objc func handleTap(_ gr: UITapGestureRecognizer) {
+            guard cablePathEnabled else { return }
+            guard let view = sceneView else { return }
+            let p = gr.location(in: view)
+
+            // 1) Versuche auf Mesh/Plane zu treffen, sonst 2) FeaturePoint.
+            let results = view.hitTest(p, types: [.existingPlaneUsingExtent, .existingPlane, .featurePoint])
+            guard let hit = results.first else { return }
+            let t = hit.worldTransform.columns.3
+            let world = simd_float3(t.x, t.y, t.z)
+            appendCablePathPoint(world)
+        }
+
+        private func appendCablePathPoint(_ p: simd_float3) {
+            cablePathPoints.append(p)
+            addCablePathMarker(at: p)
+            if cablePathPoints.count >= 2 {
+                let a = cablePathPoints[cablePathPoints.count - 2]
+                let b = cablePathPoints[cablePathPoints.count - 1]
+                addCablePathSegment(from: a, to: b)
+            }
+        }
+
+        private func addCablePathMarker(at p: simd_float3) {
+            guard let root = cablePathRootNode else { return }
+            let sphere = SCNSphere(radius: 0.015)
+            let mat = sphere.firstMaterial ?? SCNMaterial()
+            mat.diffuse.contents = UIColor.systemYellow
+            mat.emission.contents = UIColor.systemYellow.withAlphaComponent(0.7)
+            mat.lightingModel = .constant
+            sphere.materials = [mat]
+            let node = SCNNode(geometry: sphere)
+            node.simdPosition = p
+            root.addChildNode(node)
+            cablePathMarkerNodes.append(node)
+        }
+
+        private func addCablePathSegment(from a: simd_float3, to b: simd_float3) {
+            guard let root = cablePathRootNode else { return }
+            let dir = b - a
+            let length = simd_length(dir)
+            guard length.isFinite, length > 0.001 else { return }
+            let cylinder = SCNCylinder(radius: 0.012, height: CGFloat(length))
+            cylinder.radialSegmentCount = 10
+            let mat = cylinder.firstMaterial ?? SCNMaterial()
+            mat.diffuse.contents = UIColor.systemYellow
+            mat.emission.contents = UIColor.systemYellow.withAlphaComponent(0.7)
+            mat.lightingModel = .constant
+            cylinder.materials = [mat]
+            let node = SCNNode(geometry: cylinder)
+            node.simdPosition = (a + b) * 0.5
+            // Zylinder ist entlang Y -> auf Segmentrichtung ausrichten.
+            let up = simd_float3(0, 1, 0)
+            let nDir = simd_normalize(dir)
+            let axis = simd_cross(up, nDir)
+            let dot = max(-1.0, min(1.0, simd_dot(up, nDir)))
+            let angle = acos(dot)
+            if simd_length(axis) > 0.0001, angle.isFinite {
+                node.simdOrientation = simd_quatf(angle: angle, axis: simd_normalize(axis))
+            }
+            root.addChildNode(node)
+            cablePathSegmentNodes.append(node)
+        }
+
+        func undoCablePathPoint() {
+            guard !cablePathPoints.isEmpty else { return }
+            cablePathPoints.removeLast()
+            if let lastMarker = cablePathMarkerNodes.popLast() {
+                lastMarker.removeFromParentNode()
+            }
+            if let lastSeg = cablePathSegmentNodes.popLast() {
+                lastSeg.removeFromParentNode()
+            }
+        }
+
+        func clearCablePath() {
+            cablePathPoints.removeAll()
+            for n in cablePathSegmentNodes { n.removeFromParentNode() }
+            for n in cablePathMarkerNodes { n.removeFromParentNode() }
+            cablePathSegmentNodes.removeAll()
+            cablePathMarkerNodes.removeAll()
         }
 
         func session(_ session: ARSession, didAdd anchors: [ARAnchor]) {
@@ -871,6 +1007,7 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
 
         func resetCaptureState() {
             updatePointCloudSamplingConfiguration()
+            clearCablePath()
             capturedKeyframes.removeAll()
             lastKeyframeCaptureTime = 0
             isExportInProgress = false
