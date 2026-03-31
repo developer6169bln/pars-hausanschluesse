@@ -694,8 +694,9 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
             guard let root = cablePathRootNode else { return }
             let sphere = SCNSphere(radius: 0.015)
             let mat = sphere.firstMaterial ?? SCNMaterial()
-            mat.diffuse.contents = UIColor.systemMagenta
-            mat.emission.contents = UIColor.systemMagenta.withAlphaComponent(0.75)
+            let cableColor = UIColor.magenta
+            mat.diffuse.contents = cableColor
+            mat.emission.contents = cableColor.withAlphaComponent(0.75)
             mat.lightingModel = .constant
             sphere.materials = [mat]
             let node = SCNNode(geometry: sphere)
@@ -712,8 +713,9 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
             let cylinder = SCNCylinder(radius: 0.012, height: CGFloat(length))
             cylinder.radialSegmentCount = 10
             let mat = cylinder.firstMaterial ?? SCNMaterial()
-            mat.diffuse.contents = UIColor.systemMagenta
-            mat.emission.contents = UIColor.systemMagenta.withAlphaComponent(0.75)
+            let cableColor = UIColor.magenta
+            mat.diffuse.contents = cableColor
+            mat.emission.contents = cableColor.withAlphaComponent(0.75)
             mat.lightingModel = .constant
             cylinder.materials = [mat]
             let node = SCNNode(geometry: cylinder)
@@ -772,7 +774,7 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
         }
 
         func session(_ session: ARSession, didUpdate anchors: [ARAnchor]) {
-            guard let view = sceneView else { return }
+            guard sceneView != nil else { return }
             updatePreviewMode(session: session)
             maybeFlushMeshSegment(session: session)
             if isMeshPreviewPaused {
