@@ -64,6 +64,7 @@ struct ARMeshScanView: View {
     @AppStorage("pointCloudDensity") private var pointCloudDensity: Double = 0.85
     @AppStorage("pointCloudCableHighlightEnabled") private var cableHighlightEnabled: Bool = true
     @AppStorage("pointCloudCableHighlightStrength") private var cableHighlightStrength: Double = 0.75
+    @AppStorage("pointCloudCableDetectOrange") private var cableDetectOrange: Bool = false
     @AppStorage("pointCloudCablePathEnabled") private var cablePathEnabled: Bool = false
     @State private var requestCablePathUndo: Bool = false
     @State private var requestCablePathClear: Bool = false
@@ -96,6 +97,7 @@ struct ARMeshScanView: View {
                 pointCloudDensity: pointCloudDensity,
                 cableHighlightEnabled: cableHighlightEnabled,
                 cableHighlightStrength: cableHighlightStrength,
+                cableDetectOrange: cableDetectOrange,
                 cablePathEnabled: cablePathEnabled,
                 requestCablePathUndo: $requestCablePathUndo,
                 requestCablePathClear: $requestCablePathClear,
@@ -246,6 +248,10 @@ struct ARMeshScanView: View {
                             .font(.caption2.monospacedDigit())
                             .foregroundStyle(.white.opacity(0.9))
                     }
+                    Toggle("Orange mit erkennen", isOn: $cableDetectOrange)
+                        .font(.caption2)
+                        .foregroundStyle(.white.opacity(0.9))
+                        .tint(.orange)
                 }
                 Toggle("Leitungsweg zeichnen", isOn: $cablePathEnabled)
                     .font(.caption2)
@@ -363,6 +369,7 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
     var pointCloudDensity: Double
     var cableHighlightEnabled: Bool
     var cableHighlightStrength: Double
+    var cableDetectOrange: Bool
     var cablePathEnabled: Bool
     @Binding var requestCablePathUndo: Bool
     @Binding var requestCablePathClear: Bool
@@ -421,6 +428,7 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
         context.coordinator.pointCloudDensity = pointCloudDensity
         context.coordinator.cableHighlightEnabled = cableHighlightEnabled
         context.coordinator.cableHighlightStrength = cableHighlightStrength
+        context.coordinator.cableDetectOrange = cableDetectOrange
         context.coordinator.cablePathEnabled = cablePathEnabled
         context.coordinator.requestCablePathUndoBinding = $requestCablePathUndo
         context.coordinator.requestCablePathClearBinding = $requestCablePathClear
@@ -466,6 +474,7 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
         context.coordinator.pointCloudDensity = pointCloudDensity
         context.coordinator.cableHighlightEnabled = cableHighlightEnabled
         context.coordinator.cableHighlightStrength = cableHighlightStrength
+        context.coordinator.cableDetectOrange = cableDetectOrange
         context.coordinator.cablePathEnabled = cablePathEnabled
         if requestCablePathUndo {
             context.coordinator.undoCablePathPoint()
@@ -550,6 +559,7 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
         var cableHighlightEnabled: Bool = true
         var cableHighlightStrength: Double = 0.75
         private var cablePreviewMaxPoints: Int = 6_000
+        var cableDetectOrange: Bool = false
         var cablePathEnabled: Bool = false
         private var cablePathPoints: [simd_float3] = []
         private var cablePathSegmentNodes: [SCNNode] = []
@@ -654,6 +664,7 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
             pointCloudPreviewMaxPoints = Int(4_000 + (d * 20_000))
             let focus = max(0.2, min(1.0, cableHighlightStrength))
             cablePreviewMaxPoints = Int(2_000 + (focus * 14_000))
+            service.detectOrangeCables = cableDetectOrange
         }
 
         @objc func handleTap(_ gr: UITapGestureRecognizer) {

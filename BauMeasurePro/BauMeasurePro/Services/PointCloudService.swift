@@ -25,6 +25,9 @@ final class PointCloudService {
     /// Harte Obergrenze für gespeicherte Punkte, um RAM-Spitzen bei langen Scans zu vermeiden.
     var maxStoredPoints: Int = 280_000
 
+    /// Kabel-Farberkennung: Standard ist Magenta (Telekom). Orange kann optional zugeschaltet werden.
+    var detectOrangeCables: Bool = false
+
     private var voxelToPoint: [String: ColoredPoint] = [:]
     private let lock = NSLock()
 
@@ -117,7 +120,7 @@ final class PointCloudService {
                 let clampedX = min(max(0, sx), camWidth - 1)
                 let clampedY = min(max(0, sy), camHeight - 1)
                 let (r, g, b) = sampleRGB(from: camImage, x: clampedX, y: clampedY)
-                let isCable = isTelekomCableColor(r: r, g: g, b: b)
+                let isCable = isTelekomCableColor(r: r, g: g, b: b, includeOrange: detectOrangeCables)
 
                 added.append((key, ColoredPoint(
                     x: worldPt.x,
@@ -203,17 +206,21 @@ final class PointCloudService {
     }
 
     /// Erkennung für Telekom-Faser-Kabel (typisch Magenta oder Orange). Arbeitet in HSV und ist robust gegen Helligkeit.
-    private func isTelekomCableColor(r: UInt8, g: UInt8, b: UInt8) -> Bool {
+    private func isTelekomCableColor(r: UInt8, g: UInt8, b: UInt8, includeOrange: Bool) -> Bool {
         let (h, s, v) = rgbToHSV(r: r, g: g, b: b)
         // Mindest-Sättigung/Helligkeit: sonst ist es meist Erde/Schatten.
         guard s >= 0.45, v >= 0.20 else { return false }
 
-        // Orange: ca. 18°–45°
-        let isOrange = (h >= 18 && h <= 45) && s >= 0.55 && v >= 0.25
         // Magenta: ca. 295°–345° (plus etwas um 0° herum, je nach Weißabgleich).
         let isMagenta = (h >= 295 && h <= 345 && s >= 0.50 && v >= 0.20)
             || (h >= 0 && h <= 10 && s >= 0.55 && v >= 0.20)
-        return isOrange || isMagenta
+        if isMagenta { return true }
+        if includeOrange {
+            // Orange: ca. 18°–45°
+            let isOrange = (h >= 18 && h <= 45) && s >= 0.55 && v >= 0.25
+            return isOrange
+        }
+        return false
     }
 
     /// RGB(0-255) -> HSV(H 0-360, S 0-1, V 0-1)
