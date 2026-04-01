@@ -923,9 +923,10 @@ struct Scan3DViewerView: View {
                 addAxisGizmo(to: s)
                 let cablePoints = storage.loadCablePathPoints(scanId: scan.id)
                 let autoPipe = storage.loadCableAutoTracePoints(scanId: scan.id)
+                let autoRadius = storage.loadCableAutoTraceRadiusMeters(scanId: scan.id) ?? 0.028
                 if let modelRoot = s.rootNode.childNode(withName: "modelRoot", recursively: true) ?? s.rootNode.childNodes.first {
                     addCablePathOverlay(to: modelRoot, points: cablePoints)
-                    addCableAutoPipeOverlay(to: modelRoot, points: autoPipe, radius: 0.028)
+                    addCableAutoPipeOverlay(to: modelRoot, points: autoPipe, radius: CGFloat(autoRadius))
                 }
                 if s.rootNode.childNode(withName: cameraNodeName, recursively: true) == nil {
                     addDefaultCamera(to: s)
@@ -937,7 +938,8 @@ struct Scan3DViewerView: View {
         case .ply(let vertices, let colors):
             let cablePoints = storage.loadCablePathPoints(scanId: scan.id)
             let autoPipe = storage.loadCableAutoTracePoints(scanId: scan.id)
-            return buildPointCloudScene(vertices: vertices, colors: colors, displayStyle: displayStyle, cablePathPoints: cablePoints, autoPipePoints: autoPipe)
+            let autoRadius = storage.loadCableAutoTraceRadiusMeters(scanId: scan.id) ?? 0.028
+            return buildPointCloudScene(vertices: vertices, colors: colors, displayStyle: displayStyle, cablePathPoints: cablePoints, autoPipePoints: autoPipe, autoPipeRadiusMeters: autoRadius)
         }
     }
 
@@ -1002,7 +1004,7 @@ struct Scan3DViewerView: View {
     }
 
     /// SCNScene aus Punktwolken-Daten. Jeder Punkt wird als kleines Quad (2 Dreiecke) gezeichnet, damit es sichtbar ist.
-    private func buildPointCloudScene(vertices: [SCNVector3], colors: [UInt8], displayStyle: PointCloudDisplayStyle, cablePathPoints: [SIMD3<Float>], autoPipePoints: [SIMD3<Float>]) -> SCNScene {
+    private func buildPointCloudScene(vertices: [SCNVector3], colors: [UInt8], displayStyle: PointCloudDisplayStyle, cablePathPoints: [SIMD3<Float>], autoPipePoints: [SIMD3<Float>], autoPipeRadiusMeters: Double) -> SCNScene {
         guard !vertices.isEmpty, colors.count >= vertices.count * 4 else { return makePlaceholderScene() }
         var useVertices = vertices
         var cx: Float = 0, cy: Float = 0, cz: Float = 0
@@ -1105,7 +1107,7 @@ struct Scan3DViewerView: View {
         recenterModelInScene(scene)
         addAxisGizmo(to: scene)
         addCablePathOverlay(to: modelRoot, points: shiftedCable)
-        addCableAutoPipeOverlay(to: modelRoot, points: shiftedAutoPipe, radius: 0.028)
+        addCableAutoPipeOverlay(to: modelRoot, points: shiftedAutoPipe, radius: CGFloat(autoPipeRadiusMeters))
         let cam = SCNNode()
         cam.name = cameraNodeName
         cam.camera = SCNCamera()

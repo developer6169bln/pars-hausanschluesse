@@ -66,6 +66,7 @@ struct ARMeshScanView: View {
     @AppStorage("pointCloudCableHighlightStrength") private var cableHighlightStrength: Double = 0.75
     @AppStorage("pointCloudCableDetectOrange") private var cableDetectOrange: Bool = false
     @AppStorage("pointCloudCableAutoTracePipe") private var cableAutoTracePipe: Bool = true
+    @AppStorage("pointCloudCableAutoPipeRadiusMeters") private var cableAutoPipeRadiusMeters: Double = 0.028
     @AppStorage("pointCloudCablePathEnabled") private var cablePathEnabled: Bool = false
     @State private var requestCablePathUndo: Bool = false
     @State private var requestCablePathClear: Bool = false
@@ -100,6 +101,7 @@ struct ARMeshScanView: View {
                 cableHighlightStrength: cableHighlightStrength,
                 cableDetectOrange: cableDetectOrange,
                 cableAutoTracePipe: cableAutoTracePipe,
+                cableAutoPipeRadiusMeters: cableAutoPipeRadiusMeters,
                 cablePathEnabled: cablePathEnabled,
                 requestCablePathUndo: $requestCablePathUndo,
                 requestCablePathClear: $requestCablePathClear,
@@ -258,6 +260,17 @@ struct ARMeshScanView: View {
                         .font(.caption2)
                         .foregroundStyle(.white.opacity(0.9))
                         .tint(.pink)
+                    if cableAutoTracePipe {
+                        HStack {
+                            Text("Rohr-Ø")
+                                .font(.caption2)
+                                .foregroundStyle(.white.opacity(0.8))
+                            Slider(value: $cableAutoPipeRadiusMeters, in: 0.010...0.060, step: 0.002)
+                            Text(String(format: "%.0f mm", cableAutoPipeRadiusMeters * 2 * 1000))
+                                .font(.caption2.monospacedDigit())
+                                .foregroundStyle(.white.opacity(0.9))
+                        }
+                    }
                 }
                 Toggle("Leitungsweg zeichnen", isOn: $cablePathEnabled)
                     .font(.caption2)
@@ -377,6 +390,7 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
     var cableHighlightStrength: Double
     var cableDetectOrange: Bool
     var cableAutoTracePipe: Bool
+    var cableAutoPipeRadiusMeters: Double
     var cablePathEnabled: Bool
     @Binding var requestCablePathUndo: Bool
     @Binding var requestCablePathClear: Bool
@@ -437,6 +451,7 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
         context.coordinator.cableHighlightStrength = cableHighlightStrength
         context.coordinator.cableDetectOrange = cableDetectOrange
         context.coordinator.cableAutoTracePipe = cableAutoTracePipe
+        context.coordinator.cableAutoPipeRadiusMeters = cableAutoPipeRadiusMeters
         context.coordinator.cablePathEnabled = cablePathEnabled
         context.coordinator.requestCablePathUndoBinding = $requestCablePathUndo
         context.coordinator.requestCablePathClearBinding = $requestCablePathClear
@@ -488,6 +503,7 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
         context.coordinator.cableHighlightStrength = cableHighlightStrength
         context.coordinator.cableDetectOrange = cableDetectOrange
         context.coordinator.cableAutoTracePipe = cableAutoTracePipe
+        context.coordinator.cableAutoPipeRadiusMeters = cableAutoPipeRadiusMeters
         context.coordinator.cablePathEnabled = cablePathEnabled
         if requestCablePathUndo {
             context.coordinator.undoCablePathPoint()
@@ -575,6 +591,7 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
         private var cablePreviewMaxPoints: Int = 6_000
         var cableDetectOrange: Bool = false
         var cableAutoTracePipe: Bool = true
+        var cableAutoPipeRadiusMeters: Double = 0.028
         var cablePathEnabled: Bool = false
         /// Gespeicherte automatische Mittellinie (für Export + Live-Rohr).
         var autoTracedCenterline: [simd_float3] = []
@@ -799,7 +816,7 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
             root.childNodes.forEach { $0.removeFromParentNode() }
             guard line.count >= 2 else { return }
             let color = UIColor.magenta
-            let radius: CGFloat = 0.028
+            let radius: CGFloat = CGFloat(max(0.008, min(0.06, cableAutoPipeRadiusMeters)))
             for i in 1..<line.count {
                 let a = line[i - 1]
                 let b = line[i]
@@ -1035,7 +1052,7 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
                     let path = storageCopy.savePointCloudPLY(plyData, scanId: scanIdCopy)
                     let cableVecs = service.copyCableCandidatePoints().map { SIMD3<Float>($0.x, $0.y, $0.z) }
                     let finalAuto = MagentaCableAutoTrace.computeCenterline(fromCablePoints: cableVecs)
-                    _ = storageCopy.saveCablePath(manualPoints: cablePointsCopy, autoTracePoints: finalAuto, scanId: scanIdCopy)
+                    _ = storageCopy.saveCablePath(manualPoints: cablePointsCopy, autoTracePoints: finalAuto, autoTraceRadiusMeters: self?.cableAutoPipeRadiusMeters, scanId: scanIdCopy)
                     DispatchQueue.main.async {
                         self?.isExportInProgress = false
                         done(path, loc?.0, loc?.1, originX, originY, originZ, self?.capturedKeyframes ?? [])
@@ -1090,7 +1107,7 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
                     }
 
                     let path = storageCopy.save3DScene(scene, scanId: scanIdCopy)
-                    _ = storageCopy.saveCablePath(manualPoints: cablePointsCopy, autoTracePoints: autoMeshSnapshot, scanId: scanIdCopy)
+                    _ = storageCopy.saveCablePath(manualPoints: cablePointsCopy, autoTracePoints: autoMeshSnapshot, autoTraceRadiusMeters: self?.cableAutoPipeRadiusMeters, scanId: scanIdCopy)
                     DispatchQueue.main.async {
                         self?.isExportInProgress = false
                         storageCopy.clearMeshSegments(scanId: scanIdCopy)
