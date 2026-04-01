@@ -67,6 +67,8 @@ struct ARMeshScanView: View {
     @AppStorage("pointCloudCableDetectOrange") private var cableDetectOrange: Bool = false
     @AppStorage("pointCloudCableAutoTracePipe") private var cableAutoTracePipe: Bool = true
     @AppStorage("pointCloudCableAutoPipeRadiusMeters") private var cableAutoPipeRadiusMeters: Double = 0.028
+    @AppStorage("pointCloudOrangeSphereEnabled") private var orangeSphereEnabled: Bool = true
+    @AppStorage("pointCloudOrangeSphereRadiusMeters") private var orangeSphereRadiusMeters: Double = 0.06
     @AppStorage("pointCloudCablePathEnabled") private var cablePathEnabled: Bool = false
     @State private var requestCablePathUndo: Bool = false
     @State private var requestCablePathClear: Bool = false
@@ -102,6 +104,8 @@ struct ARMeshScanView: View {
                 cableDetectOrange: cableDetectOrange,
                 cableAutoTracePipe: cableAutoTracePipe,
                 cableAutoPipeRadiusMeters: cableAutoPipeRadiusMeters,
+                orangeSphereEnabled: orangeSphereEnabled,
+                orangeSphereRadiusMeters: orangeSphereRadiusMeters,
                 cablePathEnabled: cablePathEnabled,
                 requestCablePathUndo: $requestCablePathUndo,
                 requestCablePathClear: $requestCablePathClear,
@@ -256,6 +260,21 @@ struct ARMeshScanView: View {
                         .font(.caption2)
                         .foregroundStyle(.white.opacity(0.9))
                         .tint(.orange)
+                    Toggle("Orange Kugel", isOn: $orangeSphereEnabled)
+                        .font(.caption2)
+                        .foregroundStyle(.white.opacity(0.9))
+                        .tint(.orange)
+                    if orangeSphereEnabled {
+                        HStack {
+                            Text("Kugel-Ø")
+                                .font(.caption2)
+                                .foregroundStyle(.white.opacity(0.8))
+                            Slider(value: $orangeSphereRadiusMeters, in: 0.03...0.20, step: 0.005)
+                            Text(String(format: "%.0f mm", orangeSphereRadiusMeters * 2 * 1000))
+                                .font(.caption2.monospacedDigit())
+                                .foregroundStyle(.white.opacity(0.9))
+                        }
+                    }
                     Toggle("Auto-Rohr (Magenta)", isOn: $cableAutoTracePipe)
                         .font(.caption2)
                         .foregroundStyle(.white.opacity(0.9))
@@ -391,6 +410,8 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
     var cableDetectOrange: Bool
     var cableAutoTracePipe: Bool
     var cableAutoPipeRadiusMeters: Double
+    var orangeSphereEnabled: Bool
+    var orangeSphereRadiusMeters: Double
     var cablePathEnabled: Bool
     @Binding var requestCablePathUndo: Bool
     @Binding var requestCablePathClear: Bool
@@ -452,6 +473,8 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
         context.coordinator.cableDetectOrange = cableDetectOrange
         context.coordinator.cableAutoTracePipe = cableAutoTracePipe
         context.coordinator.cableAutoPipeRadiusMeters = cableAutoPipeRadiusMeters
+        context.coordinator.orangeSphereEnabled = orangeSphereEnabled
+        context.coordinator.orangeSphereRadiusMeters = orangeSphereRadiusMeters
         context.coordinator.cablePathEnabled = cablePathEnabled
         context.coordinator.requestCablePathUndoBinding = $requestCablePathUndo
         context.coordinator.requestCablePathClearBinding = $requestCablePathClear
@@ -465,10 +488,18 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
         cableNode.name = "CableHighlightNode"
         sceneView.scene.rootNode.addChildNode(cableNode)
         context.coordinator.cableHighlightNode = cableNode
+        let orangeCableNode = SCNNode()
+        orangeCableNode.name = "OrangeCableNode"
+        sceneView.scene.rootNode.addChildNode(orangeCableNode)
+        context.coordinator.orangeCableNode = orangeCableNode
         let cablePathNode = SCNNode()
         cablePathNode.name = "CablePathNode"
         sceneView.scene.rootNode.addChildNode(cablePathNode)
         context.coordinator.cablePathRootNode = cablePathNode
+        let orangeSphereNode = SCNNode()
+        orangeSphereNode.name = "OrangeSphereNode"
+        sceneView.scene.rootNode.addChildNode(orangeSphereNode)
+        context.coordinator.orangeSphereNode = orangeSphereNode
         let autoPipeNode = SCNNode()
         autoPipeNode.name = "AutoCablePipeNode"
         sceneView.scene.rootNode.addChildNode(autoPipeNode)
@@ -504,6 +535,8 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
         context.coordinator.cableDetectOrange = cableDetectOrange
         context.coordinator.cableAutoTracePipe = cableAutoTracePipe
         context.coordinator.cableAutoPipeRadiusMeters = cableAutoPipeRadiusMeters
+        context.coordinator.orangeSphereEnabled = orangeSphereEnabled
+        context.coordinator.orangeSphereRadiusMeters = orangeSphereRadiusMeters
         context.coordinator.cablePathEnabled = cablePathEnabled
         if requestCablePathUndo {
             context.coordinator.undoCablePathPoint()
@@ -546,8 +579,10 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
         var knownMeshNodes: [UUID: SCNNode] = [:]
         var pointCloudNode: SCNNode?
         var cableHighlightNode: SCNNode?
+        var orangeCableNode: SCNNode?
         var cablePathRootNode: SCNNode?
         var autoTracePipeRootNode: SCNNode?
+        var orangeSphereNode: SCNNode?
         var scanPathRootNode: SCNNode?
         var pointCloudService: PointCloudService?
         var scanProcedure: ScanProcedure = .pointCloud
@@ -592,9 +627,13 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
         var cableDetectOrange: Bool = false
         var cableAutoTracePipe: Bool = true
         var cableAutoPipeRadiusMeters: Double = 0.028
+        var orangeSphereEnabled: Bool = true
+        var orangeSphereRadiusMeters: Double = 0.06
         var cablePathEnabled: Bool = false
         /// Gespeicherte automatische Mittellinie (für Export + Live-Rohr).
         var autoTracedCenterline: [simd_float3] = []
+        /// Letzte erkannte orange Kugel (für Export + Viewer).
+        var detectedOrangeSphere: (center: simd_float3, radius: Float)?
         private var cablePathPoints: [simd_float3] = []
         private var cablePathSegmentNodes: [SCNNode] = []
         private var cablePathMarkerNodes: [SCNNode] = []
@@ -645,8 +684,10 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
             lastGeometryUpdateTime = now
             let node = pointCloudNode
             let cableNode = cableHighlightNode
+            let orangeCableNode = orangeCableNode
             let highlightOn = cableHighlightEnabled
             let tracePipeOn = cableAutoTracePipe
+            let orangeSphereOn = orangeSphereEnabled
             DispatchQueue.global(qos: .userInitiated).async { [weak service, weak node, weak cableNode, weak self] in
                 // Live-Punktwolke dynamisch je nach Dichteprofil begrenzen.
                 guard let service = service, let node = node,
@@ -665,6 +706,45 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
                         highlightColor: (255, 0, 255)
                     )
                 }()
+                let orangeCableGeometry: SCNGeometry? = {
+                    guard highlightOn else { return nil }
+                    let orange = service.copyOrangeCableCandidatePoints()
+                    guard !orange.isEmpty else { return nil }
+                    let pts = orange.map { ColoredPoint(x: $0.x, y: $0.y, z: $0.z, r: 255, g: 165, b: 0, isCableCandidate: true, isOrangeCandidate: true) }
+                    // Trick: lokale Geometrieerzeugung über temporäres Service ist overkill; wir bauen direkt.
+                    var vertices: [SCNVector3] = pts.map { SCNVector3($0.x, $0.y, $0.z) }
+                    var colors: [UInt8] = []
+                    colors.reserveCapacity(pts.count * 4)
+                    for _ in pts { colors.append(255); colors.append(165); colors.append(0); colors.append(255) }
+                    let vertexData = Data(bytes: &vertices, count: vertices.count * MemoryLayout<SCNVector3>.size)
+                    let colorData = Data(colors)
+                    let vertexSource = SCNGeometrySource(
+                        data: vertexData, semantic: .vertex, vectorCount: pts.count,
+                        usesFloatComponents: true, componentsPerVector: 3, bytesPerComponent: MemoryLayout<Float>.size,
+                        dataOffset: 0, dataStride: MemoryLayout<SCNVector3>.size
+                    )
+                    let colorSource = SCNGeometrySource(
+                        data: colorData, semantic: .color, vectorCount: pts.count,
+                        usesFloatComponents: false, componentsPerVector: 4, bytesPerComponent: 1,
+                        dataOffset: 0, dataStride: 4
+                    )
+                    var indices = [Int32](repeating: 0, count: pts.count)
+                    for i in 0..<pts.count { indices[i] = Int32(i) }
+                    let element = SCNGeometryElement(
+                        data: Data(bytes: indices, count: indices.count * MemoryLayout<Int32>.size),
+                        primitiveType: .point, primitiveCount: pts.count, bytesPerIndex: MemoryLayout<Int32>.size
+                    )
+                    let s = CGFloat(max(1.0, min(10.0, (self?.pointCloudPointSize ?? 1.0) * 2.8 + 0.8)))
+                    element.pointSize = s
+                    element.minimumPointScreenSpaceRadius = s
+                    element.maximumPointScreenSpaceRadius = s
+                    let geo = SCNGeometry(sources: [vertexSource, colorSource], elements: [element])
+                    let mat = geo.firstMaterial ?? SCNMaterial()
+                    mat.lightingModel = .constant
+                    mat.isDoubleSided = true
+                    geo.materials = [mat]
+                    return geo
+                }()
 
                 var newAutoLine: [simd_float3] = []
                 if highlightOn, tracePipeOn {
@@ -675,6 +755,29 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
                     }
                 }
 
+                let orangeSphere: (center: simd_float3, radius: Float)? = {
+                    guard orangeSphereOn else { return nil }
+                    let orangePts = service.copyOrangeCandidatePoints()
+                    guard orangePts.count >= 120 else { return nil }
+                    var sample = orangePts
+                    if sample.count > 2500 {
+                        sample.shuffle()
+                        sample = Array(sample.prefix(2500))
+                    }
+                    var c = simd_float3(0, 0, 0)
+                    for p in sample { c += simd_float3(p.x, p.y, p.z) }
+                    c /= Float(sample.count)
+                    var dists: [Float] = []
+                    dists.reserveCapacity(sample.count)
+                    for p in sample { dists.append(simd_distance(c, simd_float3(p.x, p.y, p.z))) }
+                    dists.sort()
+                    let median = dists[dists.count / 2]
+                    // Plausibilität: Radius im erwarteten Bereich.
+                    let expected = Float(self?.orangeSphereRadiusMeters ?? 0.06)
+                    if median < expected * 0.4 || median > expected * 2.5 { return nil }
+                    return (c, median)
+                }()
+
                 DispatchQueue.main.async {
                     node.geometry = geometry
                     node.position = SCNVector3(0, 0, 0)
@@ -684,6 +787,28 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
                         cableNode.geometry = cableGeometry
                         cableNode.position = SCNVector3(0, 0, 0)
                         cableNode.opacity = 1.0
+                    }
+                    if let orangeCableNode = orangeCableNode {
+                        orangeCableNode.geometry = orangeCableGeometry
+                        orangeCableNode.position = SCNVector3(0, 0, 0)
+                        orangeCableNode.opacity = 1.0
+                    }
+                    if let orangeSphereNode = self?.orangeSphereNode {
+                        if let sph = orangeSphere {
+                            let sphere = SCNSphere(radius: CGFloat(sph.radius))
+                            let m = sphere.firstMaterial ?? SCNMaterial()
+                            m.diffuse.contents = UIColor.orange
+                            m.emission.contents = UIColor.orange.withAlphaComponent(0.9)
+                            m.lightingModel = .constant
+                            sphere.materials = [m]
+                            orangeSphereNode.geometry = sphere
+                            orangeSphereNode.simdPosition = sph.center
+                            orangeSphereNode.opacity = 1.0
+                            self?.detectedOrangeSphere = sph
+                        } else {
+                            orangeSphereNode.geometry = nil
+                            self?.detectedOrangeSphere = nil
+                        }
                     }
                     guard let self = self else { return }
                     if !highlightOn || !tracePipeOn {
@@ -1053,6 +1178,9 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
                     let cableVecs = service.copyCableCandidatePoints().map { SIMD3<Float>($0.x, $0.y, $0.z) }
                     let finalAuto = MagentaCableAutoTrace.computeCenterline(fromCablePoints: cableVecs)
                     _ = storageCopy.saveCablePath(manualPoints: cablePointsCopy, autoTracePoints: finalAuto, autoTraceRadiusMeters: self?.cableAutoPipeRadiusMeters, scanId: scanIdCopy)
+                    if let sph = self?.detectedOrangeSphere {
+                        _ = storageCopy.saveOrangeSphereDetection(center: sph.center, radiusMeters: sph.radius, scanId: scanIdCopy)
+                    }
                     DispatchQueue.main.async {
                         self?.isExportInProgress = false
                         done(path, loc?.0, loc?.1, originX, originY, originZ, self?.capturedKeyframes ?? [])
@@ -1070,6 +1198,7 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
             let segmentPaths = cachedSegmentPaths
             let cablePointsCopy = self.cablePathPoints
             let autoMeshSnapshot = self.autoTracedCenterline
+            let orangeSphereSnapshot = self.detectedOrangeSphere
 
             DispatchQueue.global(qos: .userInitiated).async { [weak self] in
                 autoreleasepool {
@@ -1108,6 +1237,9 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
 
                     let path = storageCopy.save3DScene(scene, scanId: scanIdCopy)
                     _ = storageCopy.saveCablePath(manualPoints: cablePointsCopy, autoTracePoints: autoMeshSnapshot, autoTraceRadiusMeters: self?.cableAutoPipeRadiusMeters, scanId: scanIdCopy)
+                    if let sph = orangeSphereSnapshot {
+                        _ = storageCopy.saveOrangeSphereDetection(center: sph.center, radiusMeters: sph.radius, scanId: scanIdCopy)
+                    }
                     DispatchQueue.main.async {
                         self?.isExportInProgress = false
                         storageCopy.clearMeshSegments(scanId: scanIdCopy)
@@ -1122,6 +1254,7 @@ private struct ARMeshScanSceneView: UIViewRepresentable {
             clearCablePath()
             autoTracedCenterline = []
             rebuildAutoTracePipe(line: [])
+            detectedOrangeSphere = nil
             capturedKeyframes.removeAll()
             lastKeyframeCaptureTime = 0
             isExportInProgress = false

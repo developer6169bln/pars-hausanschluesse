@@ -12,6 +12,7 @@ struct ColoredPoint {
     var g: UInt8
     var b: UInt8
     var isCableCandidate: Bool
+    var isOrangeCandidate: Bool
 }
 
 /// Sammelt Tiefenbild + Kamerabild zu einer RGB-Punktwolke (ScanAce-ähnlich). Thread-sicher.
@@ -121,13 +122,15 @@ final class PointCloudService {
                 let clampedY = min(max(0, sy), camHeight - 1)
                 let (r, g, b) = sampleRGB(from: camImage, x: clampedX, y: clampedY)
                 let isCable = isTelekomCableColor(r: r, g: g, b: b, includeOrange: detectOrangeCables)
+                let isOrange = isOrangeColor(r: r, g: g, b: b)
 
                 added.append((key, ColoredPoint(
                     x: worldPt.x,
                     y: worldPt.y,
                     z: worldPt.z,
                     r: r, g: g, b: b,
-                    isCableCandidate: isCable
+                    isCableCandidate: isCable,
+                    isOrangeCandidate: isOrange
                 )))
             }
         }
@@ -223,6 +226,13 @@ final class PointCloudService {
         return false
     }
 
+    /// Orange-Maske (für Kabel + „orange Kugel“). Etwas strenger als allgemeines Orange.
+    private func isOrangeColor(r: UInt8, g: UInt8, b: UInt8) -> Bool {
+        let (h, s, v) = rgbToHSV(r: r, g: g, b: b)
+        guard s >= 0.55, v >= 0.22 else { return false }
+        return (h >= 18 && h <= 48)
+    }
+
     /// RGB(0-255) -> HSV(H 0-360, S 0-1, V 0-1)
     private func rgbToHSV(r: UInt8, g: UInt8, b: UInt8) -> (h: Double, s: Double, v: Double) {
         let rf = Double(r) / 255.0
@@ -271,6 +281,20 @@ final class PointCloudService {
         lock.lock()
         defer { lock.unlock() }
         return voxelToPoint.values.filter { $0.isCableCandidate }
+    }
+
+    func copyOrangeCandidatePoints() -> [ColoredPoint] {
+        lock.lock()
+        defer { lock.unlock() }
+        return voxelToPoint.values.filter { $0.isOrangeCandidate }
+    }
+
+    func copyOrangeCableCandidatePoints() -> [ColoredPoint] {
+        // Orange Kabel nur dann, wenn Orange-Erkennung explizit aktiv ist.
+        guard detectOrangeCables else { return [] }
+        lock.lock()
+        defer { lock.unlock() }
+        return voxelToPoint.values.filter { $0.isOrangeCandidate && $0.isCableCandidate }
     }
 
     /// Erstellt eine SCNGeometry für die Punktwolke (für Anzeige). Optional: max Punkte begrenzen.

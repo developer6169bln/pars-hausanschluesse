@@ -156,6 +156,20 @@ private func addCableAutoPipeOverlay(to parent: SCNNode, points: [SIMD3<Float>],
     parent.addChildNode(root)
 }
 
+private func addOrangeSphereOverlay(to parent: SCNNode, center: SIMD3<Float>, radius: Float) {
+    let node = SCNNode()
+    node.name = "orangeSphereOverlay"
+    let sphere = SCNSphere(radius: CGFloat(radius))
+    let mat = sphere.firstMaterial ?? SCNMaterial()
+    mat.diffuse.contents = UIColor.orange
+    mat.emission.contents = UIColor.orange.withAlphaComponent(0.9)
+    mat.lightingModel = .constant
+    sphere.materials = [mat]
+    node.geometry = sphere
+    node.simdPosition = center
+    parent.addChildNode(node)
+}
+
 /// Platzhalter-Szene: gut sichtbarer orangener Würfel + Kamera.
 private func makePlaceholderScene() -> SCNScene {
     let scene = SCNScene()
@@ -924,9 +938,13 @@ struct Scan3DViewerView: View {
                 let cablePoints = storage.loadCablePathPoints(scanId: scan.id)
                 let autoPipe = storage.loadCableAutoTracePoints(scanId: scan.id)
                 let autoRadius = storage.loadCableAutoTraceRadiusMeters(scanId: scan.id) ?? 0.028
+                let orangeSphere = storage.loadOrangeSphereDetection(scanId: scan.id)
                 if let modelRoot = s.rootNode.childNode(withName: "modelRoot", recursively: true) ?? s.rootNode.childNodes.first {
                     addCablePathOverlay(to: modelRoot, points: cablePoints)
                     addCableAutoPipeOverlay(to: modelRoot, points: autoPipe, radius: CGFloat(autoRadius))
+                    if let sph = orangeSphere {
+                        addOrangeSphereOverlay(to: modelRoot, center: sph.center, radius: sph.radiusMeters)
+                    }
                 }
                 if s.rootNode.childNode(withName: cameraNodeName, recursively: true) == nil {
                     addDefaultCamera(to: s)
@@ -939,7 +957,8 @@ struct Scan3DViewerView: View {
             let cablePoints = storage.loadCablePathPoints(scanId: scan.id)
             let autoPipe = storage.loadCableAutoTracePoints(scanId: scan.id)
             let autoRadius = storage.loadCableAutoTraceRadiusMeters(scanId: scan.id) ?? 0.028
-            return buildPointCloudScene(vertices: vertices, colors: colors, displayStyle: displayStyle, cablePathPoints: cablePoints, autoPipePoints: autoPipe, autoPipeRadiusMeters: autoRadius)
+            let orangeSphere = storage.loadOrangeSphereDetection(scanId: scan.id)
+            return buildPointCloudScene(vertices: vertices, colors: colors, displayStyle: displayStyle, cablePathPoints: cablePoints, autoPipePoints: autoPipe, autoPipeRadiusMeters: autoRadius, orangeSphere: orangeSphere)
         }
     }
 
@@ -1004,7 +1023,7 @@ struct Scan3DViewerView: View {
     }
 
     /// SCNScene aus Punktwolken-Daten. Jeder Punkt wird als kleines Quad (2 Dreiecke) gezeichnet, damit es sichtbar ist.
-    private func buildPointCloudScene(vertices: [SCNVector3], colors: [UInt8], displayStyle: PointCloudDisplayStyle, cablePathPoints: [SIMD3<Float>], autoPipePoints: [SIMD3<Float>], autoPipeRadiusMeters: Double) -> SCNScene {
+    private func buildPointCloudScene(vertices: [SCNVector3], colors: [UInt8], displayStyle: PointCloudDisplayStyle, cablePathPoints: [SIMD3<Float>], autoPipePoints: [SIMD3<Float>], autoPipeRadiusMeters: Double, orangeSphere: (center: SIMD3<Float>, radiusMeters: Float)?) -> SCNScene {
         guard !vertices.isEmpty, colors.count >= vertices.count * 4 else { return makePlaceholderScene() }
         var useVertices = vertices
         var cx: Float = 0, cy: Float = 0, cz: Float = 0
@@ -1025,6 +1044,10 @@ struct Scan3DViewerView: View {
         // Kabelpfad muss denselben Recenter-Offset bekommen wie die Punktwolke.
         let shiftedCable = cablePathPoints.map { SIMD3<Float>($0.x - cx, $0.y - cy, $0.z - cz) }
         let shiftedAutoPipe = autoPipePoints.map { SIMD3<Float>($0.x - cx, $0.y - cy, $0.z - cz) }
+        let shiftedOrangeSphere: (center: SIMD3<Float>, radiusMeters: Float)? = {
+            guard let sph = orangeSphere else { return nil }
+            return (SIMD3<Float>(sph.center.x - cx, sph.center.y - cy, sph.center.z - cz), sph.radiusMeters)
+        }()
         var minX: Float = .greatestFiniteMagnitude, maxX: Float = -.greatestFiniteMagnitude
         var minY: Float = .greatestFiniteMagnitude, maxY: Float = -.greatestFiniteMagnitude
         var minZ: Float = .greatestFiniteMagnitude, maxZ: Float = -.greatestFiniteMagnitude
@@ -1108,6 +1131,9 @@ struct Scan3DViewerView: View {
         addAxisGizmo(to: scene)
         addCablePathOverlay(to: modelRoot, points: shiftedCable)
         addCableAutoPipeOverlay(to: modelRoot, points: shiftedAutoPipe, radius: CGFloat(autoPipeRadiusMeters))
+        if let sph = shiftedOrangeSphere {
+            addOrangeSphereOverlay(to: modelRoot, center: sph.center, radius: sph.radiusMeters)
+        }
         let cam = SCNNode()
         cam.name = cameraNodeName
         cam.camera = SCNCamera()

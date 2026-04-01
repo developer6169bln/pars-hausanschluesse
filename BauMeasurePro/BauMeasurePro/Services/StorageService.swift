@@ -304,6 +304,49 @@ class StorageService {
         }
     }
 
+    // MARK: - Orange Kugel (Detektion)
+
+    struct OrangeSphereDetection: Codable, Equatable {
+        var centerX: Float
+        var centerY: Float
+        var centerZ: Float
+        var radiusMeters: Float
+        var createdAt: Date
+    }
+
+    func saveOrangeSphereDetection(center: SIMD3<Float>, radiusMeters: Float, scanId: UUID) -> String? {
+        guard let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return nil }
+        let subdir = dir.appendingPathComponent("3dscans", isDirectory: true)
+        do { try FileManager.default.createDirectory(at: subdir, withIntermediateDirectories: true) } catch { return nil }
+        let fileName = "\(scanId.uuidString).orangeSphere.json"
+        let url = subdir.appendingPathComponent(fileName)
+        let payload = OrangeSphereDetection(
+            centerX: center.x, centerY: center.y, centerZ: center.z,
+            radiusMeters: radiusMeters,
+            createdAt: Date()
+        )
+        do {
+            let data = try JSONEncoder().encode(payload)
+            try data.write(to: url, options: [.atomic])
+            return "3dscans/\(fileName)"
+        } catch {
+            return nil
+        }
+    }
+
+    func loadOrangeSphereDetection(scanId: UUID) -> (center: SIMD3<Float>, radiusMeters: Float)? {
+        let rel = "3dscans/\(scanId.uuidString).orangeSphere.json"
+        let full = fullPath(forStoredPath: rel)
+        guard FileManager.default.fileExists(atPath: full) else { return nil }
+        do {
+            let data = try Data(contentsOf: URL(fileURLWithPath: full))
+            let decoded = try JSONDecoder().decode(OrangeSphereDetection.self, from: data)
+            return (SIMD3<Float>(decoded.centerX, decoded.centerY, decoded.centerZ), decoded.radiusMeters)
+        } catch {
+            return nil
+        }
+    }
+
     /// Speichert ein Zwischen-Segment für lange Mesh-Scans auf Disk.
     /// Rückgabe ist ein relativer Pfad (z. B. "3dscans/segments/<scanId>/segment-3.scn").
     func saveMeshSegmentScene(_ scene: SCNScene, scanId: UUID, segmentIndex: Int) -> String? {
