@@ -1578,7 +1578,9 @@ struct EditProjectSheet: View {
             abnahmeMaengelText: project.abnahmeMaengelText,
             kundeName: kundeName.isEmpty ? nil : kundeName.trimmingCharacters(in: .whitespaces),
             kundeTelefon: kundeTelefon.isEmpty ? nil : kundeTelefon.trimmingCharacters(in: .whitespaces),
-            kundeEmail: kundeEmail.isEmpty ? nil : kundeEmail.trimmingCharacters(in: .whitespaces)
+            kundeEmail: kundeEmail.isEmpty ? nil : kundeEmail.trimmingCharacters(in: .whitespaces),
+            bauhinderung: project.bauhinderung,
+            threeDScans: project.threeDScans
         )
         onSave(updated)
     }
