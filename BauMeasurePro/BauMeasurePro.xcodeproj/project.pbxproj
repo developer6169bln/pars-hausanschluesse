@@ -44,6 +44,7 @@
 		BM01EX1F60000100000001 /* ExportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BM01EX2F60000100000002 /* ExportService.swift */; };
 		BM01SK1F60000100000001 /* MeasurementSketchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BM01SK2F60000100000002 /* MeasurementSketchView.swift */; };
 		BM01PC1F60000100000001 /* PointCloudService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BM01PC2F60000100000002 /* PointCloudService.swift */; };
+		BM01MT1F60000100000001 /* MagentaCableAutoTrace.swift in Sources */ = {isa = PBXBuildFile; fileRef = BM01MT2F60000100000002 /* MagentaCableAutoTrace.swift */; };
 		BM01SV1F60000100000001 /* Scan3DViewerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BM01SV2F60000100000002 /* Scan3DViewerView.swift */; };
 		BM01LG1F60000100000001 /* GeoFeature.swift in Sources */ = {isa = PBXBuildFile; fileRef = BM01LF1F60000100000001 /* GeoFeature.swift */; };
 		BM01LG2F60000100000001 /* GeoJSONLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = BM01LF2F60000100000001 /* GeoJSONLoader.swift */; };
@@ -92,6 +93,7 @@
 		BM01EX2F60000100000002 /* ExportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportService.swift; sourceTree = "<group>"; };
 		BM01SK2F60000100000002 /* MeasurementSketchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeasurementSketchView.swift; sourceTree = "<group>"; };
 		BM01PC2F60000100000002 /* PointCloudService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PointCloudService.swift; sourceTree = "<group>"; };
+		BM01MT2F60000100000002 /* MagentaCableAutoTrace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MagentaCableAutoTrace.swift; sourceTree = "<group>"; };
 		BM01SV2F60000100000002 /* Scan3DViewerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Scan3DViewerView.swift; sourceTree = "<group>"; };
 		BM01LF1F60000100000001 /* GeoFeature.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeoFeature.swift; sourceTree = "<group>"; };
 		BM01LF2F60000100000001 /* GeoJSONLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeoJSONLoader.swift; sourceTree = "<group>"; };
@@ -192,6 +194,7 @@
 				BM01BA2F6000010000000A /* CameraService.swift */,
 				BM01BB2F6000010000000B /* StorageService.swift */,
 				BM01PC2F60000100000002 /* PointCloudService.swift */,
+				BM01MT2F60000100000002 /* MagentaCableAutoTrace.swift */,
 				BM01SY2F60000100000001 /* ProjectSyncService.swift */,
 				BM01BC2F6000010000000C /* PDFService.swift */,
 				BM01BP2F60000100000016 /* PhotoLibraryService.swift */,
@@ -366,6 +369,7 @@
 				BM01AA2F6000010000000A /* CameraService.swift in Sources */,
 				BM01AB2F6000010000000B /* StorageService.swift in Sources */,
 				BM01PC1F60000100000001 /* PointCloudService.swift in Sources */,
+				BM01MT1F60000100000001 /* MagentaCableAutoTrace.swift in Sources */,
 				BM01AC2F6000010000000C /* PDFService.swift in Sources */,
 				BM01AP2F60000100000015 /* PhotoLibraryService.swift in Sources */,
 				BM01AD2F6000010000000D /* MapView.swift in Sources */,

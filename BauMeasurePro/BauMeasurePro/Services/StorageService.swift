@@ -240,12 +240,14 @@ class StorageService {
 
     struct CablePath: Codable, Equatable {
         var points: [CablePathPoint]
+        /// Automatisch aus Magenta-Punkten berechnete Mittellinie (Rohr im Viewer).
+        var autoTracePoints: [CablePathPoint]?
         var createdAt: Date
     }
 
-    /// Speichert den gezeichneten Leitungsweg als JSON (relativ in Documents, unter 3dscans/).
+    /// Speichert manuellen Leitungsweg und optional automatisch nachgezeichnete Mittellinie.
     /// Rückgabe ist relativer Pfad (z. B. "3dscans/<id>.cablepath.json") oder nil.
-    func saveCablePath(points: [SIMD3<Float>], scanId: UUID) -> String? {
+    func saveCablePath(manualPoints: [SIMD3<Float>], autoTracePoints: [SIMD3<Float>], scanId: UUID) -> String? {
         guard let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return nil }
         let subdir = dir.appendingPathComponent("3dscans", isDirectory: true)
         do {
@@ -255,8 +257,10 @@ class StorageService {
         }
         let fileName = "\(scanId.uuidString).cablepath.json"
         let url = subdir.appendingPathComponent(fileName)
+        let autoEncoded: [CablePathPoint]? = autoTracePoints.isEmpty ? nil : autoTracePoints.map { CablePathPoint(x: $0.x, y: $0.y, z: $0.z) }
         let payload = CablePath(
-            points: points.map { CablePathPoint(x: $0.x, y: $0.y, z: $0.z) },
+            points: manualPoints.map { CablePathPoint(x: $0.x, y: $0.y, z: $0.z) },
+            autoTracePoints: autoEncoded,
             createdAt: Date()
         )
         do {
@@ -268,17 +272,28 @@ class StorageService {
         }
     }
 
-    /// Lädt den Leitungsweg eines Scans, falls vorhanden (ansonsten leeres Array).
+    /// Lädt den manuell gezeichneten Leitungsweg (ansonsten leeres Array).
     func loadCablePathPoints(scanId: UUID) -> [SIMD3<Float>] {
+        loadCablePath(scanId: scanId).manual
+    }
+
+    /// Automatisch nachgezeichnete Mittellinie (Magenta-Kabel), falls gespeichert.
+    func loadCableAutoTracePoints(scanId: UUID) -> [SIMD3<Float>] {
+        loadCablePath(scanId: scanId).autoTrace
+    }
+
+    private func loadCablePath(scanId: UUID) -> (manual: [SIMD3<Float>], autoTrace: [SIMD3<Float>]) {
         let rel = "3dscans/\(scanId.uuidString).cablepath.json"
         let full = fullPath(forStoredPath: rel)
-        guard FileManager.default.fileExists(atPath: full) else { return [] }
+        guard FileManager.default.fileExists(atPath: full) else { return ([], []) }
         do {
             let data = try Data(contentsOf: URL(fileURLWithPath: full))
             let decoded = try JSONDecoder().decode(CablePath.self, from: data)
-            return decoded.points.map { SIMD3<Float>($0.x, $0.y, $0.z) }
+            let manual = decoded.points.map { SIMD3<Float>($0.x, $0.y, $0.z) }
+            let auto = (decoded.autoTracePoints ?? []).map { SIMD3<Float>($0.x, $0.y, $0.z) }
+            return (manual, auto)
         } catch {
-            return []
+            return ([], [])
         }
     }
 
