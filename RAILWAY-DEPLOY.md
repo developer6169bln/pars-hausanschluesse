@@ -16,6 +16,35 @@ So hostest du den Auftragspool-Server bei Railway (kostenlos nutzbar). Danach br
 - **Branch:** `main` (oder den Branch, auf den du pushst)
 - Railway erstellt ein neues Projekt und startet einen Build. Bei jedem **Push** auf den verbundenen Branch wird automatisch neu gebaut und deployed.
 
+## 2b. (Neu) QGIS Server als zweiter Service
+
+Wenn ihr **QGIS als Server** mitlaufen lassen wollt (WMS/WFS), richtet ihr im gleichen Railway Projekt einen **zweiten Service** ein:
+
+- **New Service** → **Deploy from GitHub repo**
+- **Root Directory:** `qgis-server`
+- Dieser Service nutzt das Dockerfile in `qgis-server/Dockerfile` und startet `qgis/qgis-server`.
+
+### QGIS Server Variablen (Service „QGIS“)
+
+- `QGIS_PROJECT_FILE=/data/project.qgz`
+  - Das ist euer QGIS Projekt (aus QGIS Desktop exportiert/gespeichert).
+
+### Persistente Daten (Service „QGIS“)
+
+Wenn ihr Projektdateien dauerhaft halten wollt:
+
+- **Volume** hinzufügen → Mount Path: `/data`
+- Dann liegt euer Projekt z. B. unter `/data/project.qgz` und bleibt bei Redeploy erhalten.
+
+### Verbindung Admin → QGIS (Service „Admin“)
+
+Im Admin-Service (dieser Repo-Root, `server/index.js`) setzt ihr:
+
+- `QGIS_WMS_BASE_URL` auf die Basis-URL des QGIS Servers, z. B. `http://<qgis-service-host>/ows`
+
+Hinweis: Der konkrete interne Hostname hängt von Railway ab (Private Networking / Service Discovery).
+Wenn ihr keine interne URL nutzt, könnt ihr auch eine öffentliche Domain des QGIS-Services nehmen.
+
 ## 3. Root-Verzeichnis, Build und Start
 
 **Hinweis:** Auf Railway läuft nur die **Admin-Web-App** (dieser Server + Frontend). Die **iOS-App (BauMeasurePro)** liegt nur als Quellcode im Repo und wird **nicht** auf Railway deployed – sie läuft auf dem iPhone über Xcode.
