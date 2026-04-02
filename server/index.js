@@ -8,6 +8,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const PORT = process.env.PORT || 3010
 const API_BASE = process.env.API_BASE || `http://localhost:${PORT}`
 
+// QGIS Server (WMS/WFS) Anbindung via Proxy (vermeidet CORS + verhindert Open-Proxy)
+// Beispiel: QGIS_WMS_BASE_URL="https://gis.example.com/ows"
+const QGIS_WMS_BASE_URL = (process.env.QGIS_WMS_BASE_URL || '').trim()
+
 // Persistente Daten: Wenn DATA_DIR gesetzt (z. B. Railway-Volume unter /data), speichern wir dort.
 // So gehen Aufträge und Uploads bei Redeploy nicht verloren.
 const DATA_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : __dirname
@@ -171,6 +175,61 @@ app.use((_req, res, next) => {
 app.options('*', (_req, res) => res.sendStatus(204))
 
 app.use('/uploads', express.static(UPLOAD_DIR))
+
+// ========== GIS: QGIS Server Proxy (WMS) ==========
+// Nutzung im Frontend: `${API_BASE}/api/qgis/wms?SERVICE=WMS&REQUEST=GetMap&...`
+app.get('/api/qgis/wms', async (req, res) => {
+  if (!QGIS_WMS_BASE_URL) {
+    return res.status(503).json({
+      error: 'QGIS_WMS_BASE_URL fehlt',
+      message: 'Server-ENV QGIS_WMS_BASE_URL setzen (z. B. https://…/ows).',
+    })
+  }
+
+  let targetUrl
+  try {
+    const base = new URL(QGIS_WMS_BASE_URL)
+    // Query-Parameter 1:1 übernehmen (GetMap, GetCapabilities, GetFeatureInfo, ...)
+    for (const [k, v] of Object.entries(req.query || {})) {
+      if (v == null) continue
+      if (Array.isArray(v)) {
+        v.forEach((vv) => base.searchParams.append(k, String(vv)))
+      } else {
+        base.searchParams.set(k, String(v))
+      }
+    }
+    targetUrl = base.toString()
+  } catch (err) {
+    return res.status(500).json({ error: 'Ungültige QGIS_WMS_BASE_URL', details: err.message })
+  }
+
+  const ac = new AbortController()
+  const t = setTimeout(() => ac.abort(), 15000)
+  try {
+    const upstream = await fetch(targetUrl, {
+      method: 'GET',
+      signal: ac.signal,
+      headers: {
+        // QGIS Server braucht i. d. R. keine Auth; falls doch, sollte das per Reverse Proxy geregelt werden.
+        'User-Agent': 'hausanschluesse-admin/1.0',
+      },
+    })
+
+    res.status(upstream.status)
+    const ct = upstream.headers.get('content-type')
+    if (ct) res.setHeader('Content-Type', ct)
+    const cc = upstream.headers.get('cache-control')
+    if (cc) res.setHeader('Cache-Control', cc)
+
+    const buf = Buffer.from(await upstream.arrayBuffer())
+    return res.send(buf)
+  } catch (err) {
+    const msg = err?.name === 'AbortError' ? 'Timeout beim QGIS Server' : (err?.message || String(err))
+    return res.status(502).json({ error: 'QGIS Proxy Fehler', message: msg })
+  } finally {
+    clearTimeout(t)
+  }
+})
 
 // Projekt-Assets (von App hochgeladen): Bilder, 3D-Scans
 app.get('/api/uploads/projects/:id/:filename', (req, res) => {

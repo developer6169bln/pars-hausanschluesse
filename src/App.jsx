@@ -1,5 +1,6 @@
 import { Routes, Route, Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useState, useEffect, useRef, createContext, useContext } from 'react'
+import QgisMapPage from './QgisMapPage.jsx'
 
 const AuftraegeContext = createContext(null)
 
@@ -3454,46 +3455,6 @@ function ProjektePage() {
   )
 }
 
-function QgisPage() {
-  const qgisUrl = 'https://qgis.org/'
-  return (
-    <div className="page">
-      <header className="topbar">
-        <Link to="/" className="link-back">← Zurück zur Übersicht</Link>
-        <div className="logo">
-          <img src="https://parsbau.de/wp-content/uploads/2023/10/logo-pars22-e1696588277925.jpg" alt="PARS Bau Logo" />
-        </div>
-        <h1>QGIS</h1>
-        <p className="subtitle">Externe GIS-Ressource (öffnet sicher im neuen Tab; Einbettung ist ggf. durch Sicherheits-Header blockiert).</p>
-      </header>
-      <main className="content">
-        <section className="card">
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
-            <a className="btn primary" href={qgisUrl} target="_blank" rel="noopener noreferrer">
-              QGIS Website öffnen
-            </a>
-            <a className="btn ghost" href={qgisUrl} target="_blank" rel="noopener noreferrer">
-              Link kopieren / im Browser öffnen
-            </a>
-          </div>
-          <p className="muted" style={{ marginTop: '0.75rem' }}>
-            Hinweis: Viele externe Seiten (auch qgis.org) erlauben aus Sicherheitsgründen kein Einbetten in iframes. Wenn unten nichts angezeigt wird, bitte den Button oben nutzen.
-          </p>
-          <div style={{ marginTop: '1rem', border: '1px solid #e2e8f0', borderRadius: 12, overflow: 'hidden' }}>
-            <iframe
-              title="QGIS"
-              src={qgisUrl}
-              style={{ width: '100%', height: '70vh', border: 0, background: '#fff' }}
-              loading="lazy"
-              referrerPolicy="no-referrer"
-            />
-          </div>
-        </section>
-      </main>
-    </div>
-  )
-}
-
 function AdminLoginPage({ onSuccess }) {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -3621,7 +3582,7 @@ export default function App() {
         <Route path="/bericht" element={<BerichtNachDatumPage />} />
         <Route path="/monteure" element={<MonteurePage />} />
         <Route path="/projekte" element={<ProjektePage />} />
-        <Route path="/qgis" element={<QgisPage />} />
+        <Route path="/qgis" element={<QgisMapPage apiBase={API_BASE} />} />
         <Route path="/auftrag/:id" element={<AuftragDetail />} />
         <Route path="/auftrag/:id/protokoll" element={<Abschlussprotokoll />} />
       </Routes>
